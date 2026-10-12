@@ -12,6 +12,9 @@
  *                          with "Remember these settings" ticked) and press OBS's go-live button,
  *                          or select an existing broadcast and start it.
  *
+ * It also adds two sources with their own commands: "Lower Third" (lower-third.cpp) and
+ * "Scripture & Hymns" (text-display.cpp).
+ *
  * It can also open the BGH LIVE Controller when OBS starts, if that's turned on in the controller's Settings.
  *
  * Every OBS setting other than those three fields is left exactly as OBS remembers it.
@@ -65,6 +68,7 @@
 #endif
 
 #include "obs-websocket-api.h"
+#include "sources.h"
 
 OBS_DECLARE_MODULE()
 OBS_MODULE_USE_DEFAULT_LOCALE("church-controller", "en-US")
@@ -552,6 +556,8 @@ static void openControllerIfWanted()
 
 bool obs_module_load(void)
 {
+	lower_third_load();
+	text_display_load();
 	LOG(LOG_INFO, "loaded");
 	return true;
 }
@@ -576,6 +582,8 @@ void obs_module_post_load(void)
 	obs_websocket_vendor_register_request(vendor, "OpenStreamStart", reqOpenStreamStart, nullptr);
 	obs_websocket_vendor_register_request(vendor, "ListYouTubeBroadcasts", reqListBroadcasts, nullptr);
 	obs_websocket_vendor_register_request(vendor, "StartYouTubeBroadcast", reqStartBroadcast, nullptr);
+	lower_third_register_requests(vendor);
+	text_display_register_requests(vendor);
 	LOG(LOG_INFO, "commands registered with obs-websocket");
 }
 

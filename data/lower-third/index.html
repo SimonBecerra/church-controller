@@ -1,0 +1,211 @@
+<!doctype html>
+<!--
+  BGH LIVE lower third: two themes
+
+  OBS's "Lower Third" source draws this page full-screen and tells it what to do with one event:
+    window event "churchLowerThird", detail = { action: "show", name: "Simon Becerra", subtitle: "Barrington, NJ", theme: "barrington" }
+                                     detail = { action: "hide" }
+  Themes (chosen per scene collection in the BGH LIVE Controller's Settings, or in the source's settings in OBS):
+    barrington  the name in Montserrat Medium over a cropped Spectral Bold "B", with an optional subtitle under it
+                in small capitals (Montserrat Medium); the controller sends one only for visiting speakers when it's switched on
+    conference  the name in Spectral Bold with the subtitle under it in Montserrat Regular, no "B",
+                in its own colour ("color", a hex code) at the same opacity
+  Showing: a small box appears, extends to the right, then the words fade in. Hiding: the same in reverse.
+  A new name while one is up swaps in place: the old name fades out, the box eases to the new length and the
+  new name fades in (the plug-in restarts the hide-after timer). A change of theme hides and reopens instead.
+
+  To use your own design, make any .html page that listens for that event, then pick it under
+  "Custom design" in the Lower Third's settings in OBS. Nothing needs rebuilding.
+  Preview in an ordinary browser: open this file and add ?demo=Simon%20Becerra to the address.
+  Add &theme=conference&subtitle=Barrington%2C%20NJ for the Conference theme (&color=%235A2A27 for its colour);
+  &hold keeps it up.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Lower Third</title>
+<style>
+  @font-face { font-family: "Spectral"; src: url("fonts/Spectral-Bold.ttf") format("truetype"); font-weight: 700; }
+  @font-face { font-family: "Montserrat"; src: url("fonts/Montserrat-Variable.ttf") format("truetype"); font-weight: 100 900; }
+
+  :root {
+    /* Change these to restyle without touching anything else */
+    --box-opacity: 0.76;               /* c2: the same for every theme and the hymn box */
+    --box: rgba(19, 41, 50, var(--box-opacity));   /* #132932, same as the hymn box */
+    --letter: #122932;                 /* Barrington: the cropped B behind the name */
+    --text: #ffffff;
+    --subtitle: rgba(255, 255, 255, 0.82);
+    --font: "Montserrat", "Segoe UI", sans-serif;
+    --serif: "Spectral", Georgia, serif;
+    --name-size: 2.1vw;                /* Barrington name: about 40px on a 1080p canvas */
+    --conf-name-size: 2.35vw;          /* Conference name: about 45px */
+    --conf-sub-size: 1.2vw;            /* Conference subtitle: about 23px */
+    --sub-size: 0.95vw;                /* Barrington subtitle: about 18px, in capitals */
+    --radius: 0.55vw;                  /* same corners as the hymn box */
+    --left: 6.3vw;                     /* about 120px from the left edge */
+    --bottom: 6.6vh;                   /* about 72px up from the bottom, level with the hymn box */
+    --height: 8.2vw;                   /* about 157px, the same height as the hymn box */
+    --min-width: 33.8vw;               /* about 650px; longer names make it longer */
+    --open-time: 600ms;
+  }
+
+  html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: transparent; }
+
+  .lt {
+    position: absolute; left: var(--left); bottom: var(--bottom);
+    height: var(--height); width: var(--height);
+    background: var(--box); border-radius: var(--radius);
+    overflow: hidden;
+    opacity: 0; transform: scale(0.94); transform-origin: left center;
+    transition: opacity 280ms ease, transform 280ms ease, width var(--open-time) cubic-bezier(.65, 0, .35, 1);
+  }
+  .lt.up { opacity: 1; transform: none; }
+
+  /* Barrington: the big B, cropped by the box, so only its middle shows */
+  .letter {
+    position: absolute; left: 1.75vw; top: 50%;
+    transform: translateY(-50%);
+    font-family: var(--serif); font-weight: 700;
+    font-size: calc(var(--height) * 2.05); line-height: 1;
+    color: var(--letter);
+    pointer-events: none; user-select: none;
+  }
+  .lt.conference .letter { display: none; }
+
+  .words {
+    position: absolute; left: 3.25vw; right: 3.25vw; top: 50%;
+    transform: translateY(-50%);
+    display: flex; flex-direction: column; gap: 0.3vw;
+    white-space: nowrap;
+    opacity: 0; transition: opacity 360ms ease;
+  }
+  .words.on { opacity: 1; }
+  .name { font-family: var(--font); font-weight: 500; font-size: var(--name-size); color: var(--text); line-height: 1.15; }
+  /* Barrington: a visiting speaker's subtitle under the name, small capitals in Montserrat Medium */
+  .subtitle { display: block; font-family: var(--font); font-weight: 500; font-size: var(--sub-size); color: var(--text); text-transform: uppercase; letter-spacing: 0.03em; line-height: 1.2; }
+  .subtitle:empty { display: none; }
+
+  /* Conference: the name in Spectral Bold, the subtitle under it in Montserrat Regular */
+  .lt.conference .name { font-family: var(--serif); font-weight: 700; font-size: var(--conf-name-size); letter-spacing: 0.005em; }
+  .lt.conference .subtitle { display: block; font-family: var(--font); font-weight: 400; font-size: var(--conf-sub-size); color: var(--subtitle); text-transform: none; letter-spacing: 0.02em; line-height: 1.2; }
+  .lt.conference .subtitle:empty { display: none; }
+</style>
+</head>
+<body>
+  <div class="lt" id="lt" aria-live="polite">
+    <span class="letter" aria-hidden="true">B</span>
+    <div class="words" id="words">
+      <span class="name" id="name"></span>
+      <span class="subtitle" id="subtitle"></span>
+    </div>
+  </div>
+
+<script>
+  const box = document.getElementById("lt");
+  const words = document.getElementById("words");
+  const nameEl = document.getElementById("name");
+  const subEl = document.getElementById("subtitle");
+  const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  const px = n => window.innerWidth * parseFloat(css(n)) / 100;
+  const wait = t => new Promise(r => setTimeout(r, t));
+  const OPEN = () => parseFloat(css("--open-time")) || 600;
+  let step = 0;      // a newer command cancels an older animation still running
+  let current = "";
+
+  // Width for these words: at least the minimum, longer for long names (up to most of the screen)
+  function widthFor() {
+    [nameEl, subEl].forEach(e => e.style.fontSize = "");
+    const pad = window.innerWidth * 0.065;   // space on both sides of the words
+    const need = () => Math.max(nameEl.scrollWidth, subEl.offsetParent ? subEl.scrollWidth : 0);
+    let w = Math.max(px("--min-width"), need() + pad);
+    const max = window.innerWidth * 0.8;
+    if (w > max) {   // very long: shrink the text to fit
+      const k = (max - pad) / need();
+      [nameEl, subEl].forEach(e => e.style.fontSize = parseFloat(getComputedStyle(e).fontSize) * k + "px");
+      w = max;
+    }
+    return w;
+  }
+
+  async function show(d) {
+    const theme = d.theme === "conference" ? "conference" : "barrington";
+    const subtitle = String(d.subtitle || "");   // the controller only sends one when it should show
+    const key = JSON.stringify([d.name, subtitle, theme, theme === "conference" ? d.color : ""]);
+    const mine = ++step;
+    if (current === key && box.classList.contains("up")) return;
+    const up = box.classList.contains("up");
+    const sameLook = up && box.classList.contains("conference") === (theme === "conference") && (theme !== "conference" || box.dataset.color === String(d.color || ""));
+    if (sameLook) {
+      // Another name while one is up (same theme): the words fade out, the box eases to the new length,
+      // and the new name fades in. No hide-and-reopen.
+      current = key;
+      words.classList.remove("on");
+      await wait(360); if (mine !== step) return;
+      nameEl.textContent = d.name; subEl.textContent = subtitle;
+      const w = widthFor(), was = box.getBoundingClientRect().width;
+      box.style.width = w + "px";
+      if (Math.abs(w - was) > 1) { await wait(OPEN() * 0.8); if (mine !== step) return; }
+      words.classList.add("on");
+      return;
+    }
+    if (up) { await hideSteps(mine); if (mine !== step) return; }
+    current = key;
+    box.classList.toggle("conference", theme === "conference");
+    box.dataset.color = String(d.color || "");
+    // Conference: its own colour (a hex code), at the same opacity as Barrington
+    const m = String(d.color || "").match(/^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i);
+    box.style.setProperty("--box", theme === "conference" && m
+      ? `rgba(${parseInt(m[1], 16)}, ${parseInt(m[2], 16)}, ${parseInt(m[3], 16)}, var(--box-opacity))` : "");
+    nameEl.textContent = d.name; subEl.textContent = subtitle;
+    const w = widthFor();
+    words.classList.remove("on");
+    // 1. a small box appears
+    box.style.width = css("--height");
+    void box.offsetWidth;
+    box.classList.add("up");
+    await wait(300); if (mine !== step) return;
+    // 2. it extends
+    box.style.width = w + "px";
+    await wait(OPEN()); if (mine !== step) return;
+    // 3. the words fade in
+    words.classList.add("on");
+  }
+
+  // The reverse: the words fade out, the box shrinks back, then disappears
+  async function hideSteps(mine) {
+    words.classList.remove("on");
+    await wait(360); if (mine !== step) return;
+    box.style.width = css("--height");
+    await wait(OPEN()); if (mine !== step) return;
+    box.classList.remove("up");
+    await wait(300);
+  }
+
+  async function hide() {
+    const mine = ++step;
+    if (!box.classList.contains("up")) { current = ""; return; }
+    await hideSteps(mine);
+    if (mine === step) current = "";
+  }
+
+  window.addEventListener("churchLowerThird", (e) => {
+    let d = e.detail || {};
+    if (typeof d === "string") { try { d = JSON.parse(d); } catch { d = {}; } }
+    if (d.action === "show" && d.name) show({name:String(d.name), subtitle:d.subtitle, theme:d.theme, color:d.color});
+    else hide();
+  });
+
+  // Preview outside OBS
+  const q = new URLSearchParams(location.search);
+  const demo = q.get("demo");
+  if (demo) {
+    document.body.style.background = q.get("bg") || "#9aa7b4";
+    const names = demo.split("|"), hold = q.has("hold");
+    const theme = q.get("theme") || "barrington", subtitle = q.get("subtitle") || "", color = q.get("color") || "";
+    let i = 0;
+    const cycle = () => { show({name:names[i++ % names.length], subtitle, theme, color}); if (!hold) setTimeout(() => { hide(); setTimeout(cycle, 2200); }, 4500); };
+    document.fonts.ready.then(() => setTimeout(cycle, 300));
+  }
+</script>
+</body>
+</html>
