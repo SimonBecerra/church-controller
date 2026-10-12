@@ -36,8 +36,8 @@
             "bundleId": "com.example.plugintemplate-for-obs"
         }
     },
-    "name": "plugintemplate-for-obs",
-    "displayName": "Plugin Template for OBS",
+    "name": "church-controller",
+    "displayName": "Church Controller",
     "version": "1.0.0",
     "author": "Your Name Here",
     "website": "https://example.com",
