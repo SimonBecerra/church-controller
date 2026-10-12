@@ -1,0 +1,62 @@
+# After every successful build of master, publish the Windows plug-in where the BGH LIVE Controller
+# looks for updates: the "plugin-latest" release of this repository.
+#   church-controller-windows.zip   church-controller\bin\64bit\church-controller.dll and church-controller\data\...
+#   version.txt                     which build it is (also inside the zip, as data\version.txt)
+# The controller compares version.txt with the copy installed in OBS and offers "Update now".
+name: Publish for the controller
+on:
+  workflow_run:
+    workflows: [Push]
+    types: [completed]
+    branches: [master]
+permissions:
+  contents: write
+  actions: read
+jobs:
+  publish:
+    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get the Windows build
+        uses: actions/download-artifact@v4
+        with:
+          pattern: '*-windows-x64-*'
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+          path: artifact
+
+      - name: Package it for the controller
+        env:
+          SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          # The build's own zip is inside the artifact
+          inner=$(find artifact -name '*windows-x64*.zip' | head -n 1)
+          mkdir unpacked
+          if [ -n "$inner" ]; then unzip -q "$inner" -d unpacked; else cp -r artifact/. unpacked/; fi
+          dll=$(find unpacked -path '*/bin/64bit/church-controller.dll' | head -n 1)
+          test -n "$dll" || { echo "church-controller.dll not found in the build"; find unpacked; exit 1; }
+          root=$(dirname "$(dirname "$(dirname "$dll")")")
+          test -d "$root/data/lower-third" || { echo "data folder missing"; exit 1; }
+          find "$root" -name '*.pdb' -delete
+          version="$(date -u +%Y.%m.%d-%H%M)-${SHA:0:7}"
+          echo "$version" > "$root/data/version.txt"
+          echo "$version" > version.txt
+          mkdir -p package/church-controller
+          cp -r "$root/." package/church-controller/
+          (cd package && zip -qr ../church-controller-windows.zip church-controller)
+          unzip -l church-controller-windows.zip
+          echo "Version $version"
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          if ! gh release view plugin-latest -R "$REPO" >/dev/null 2>&1; then
+            gh release create plugin-latest -R "$REPO" --target master --latest=false \
+              --title "Plug-in for the BGH LIVE Controller" \
+              --notes "The newest build of the plug-in. The BGH LIVE Controller downloads and installs it automatically; there's nothing to do here."
+          fi
+          gh release upload plugin-latest church-controller-windows.zip version.txt --clobber -R "$REPO"
