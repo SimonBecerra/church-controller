@@ -535,9 +535,16 @@ bool obs_module_load(void)
 	return true;
 }
 
+// Open the controller once OBS's window is up, so the controller opens in front of OBS instead of behind it
+static void onFrontendEvent(enum obs_frontend_event event, void *)
+{
+	if (event == OBS_FRONTEND_EVENT_FINISHED_LOADING)
+		openControllerIfWanted();
+}
+
 void obs_module_post_load(void)
 {
-	openControllerIfWanted();
+	obs_frontend_add_event_callback(onFrontendEvent, nullptr);
 	vendor = obs_websocket_register_vendor("church-controller");
 	if (!vendor) {
 		LOG(LOG_WARNING, "obs-websocket isn't available; the controller's Go Live features won't work.");
@@ -553,5 +560,6 @@ void obs_module_post_load(void)
 
 void obs_module_unload(void)
 {
+	obs_frontend_remove_event_callback(onFrontendEvent, nullptr);
 	LOG(LOG_INFO, "unloaded");
 }
