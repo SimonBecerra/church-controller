@@ -7,6 +7,9 @@
 
 #include <callback/calldata.h>
 #include <util/bmem.h>
+#include <util/platform.h>
+
+#include <algorithm>
 
 // obs-browser's own default page style, plus a counter so reload() can force a reload
 static const char *baseCss = "body { background-color: rgba(0, 0, 0, 0); margin: 0px auto; overflow: hidden; }";
@@ -50,13 +53,18 @@ bool BrowserPage::configure(const std::string &customPath)
 	if (page.empty()) {
 		char *p = obs_module_file(builtin);
 		if (p) {
-			page = p;
+			// OBS gives the data folder relative to its own program folder ("../../data/obs-plugins/...").
+			// The browser needs the full path, or it loads an empty page and nothing is drawn.
+			char *full = os_get_abs_path_ptr(p);
+			page = full ? full : p;
+			bfree(full);
 			bfree(p);
 		} else {
 			blog(LOG_WARNING, "[church-controller] %s: couldn't find %s in the plug-in's data folder",
 			     debugName, builtin);
 		}
 	}
+	std::replace(page.begin(), page.end(), '\\', '/'); // C:\Program Files\... -> C:/Program Files/...
 	uint32_t nw = 1920, nh = 1080;
 	obs_video_info ovi;
 	if (obs_get_video_info(&ovi)) {
@@ -71,8 +79,10 @@ bool BrowserPage::configure(const std::string &customPath)
 		w = nw;
 		h = nh;
 	}
-	if (changed)
+	if (changed) {
+		blog(LOG_INFO, "[church-controller] %s: design %s", debugName, page.c_str());
 		apply();
+	}
 	return changed && browser;
 }
 
