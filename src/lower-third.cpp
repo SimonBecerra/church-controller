@@ -76,7 +76,7 @@ struct LowerThird {
 	std::mutex lock; // guards everything below
 	bool enabled = true;
 	std::vector<std::string> names;
-	std::string showing; // name on screen now, or empty
+	std::string showing;  // name on screen now, or empty
 	std::string subtitle; // shown under the name in the Conference theme
 	std::string theme = "barrington";
 	std::string color = "#132932"; // Conference box colour
@@ -320,7 +320,8 @@ static void lt_update(void *data, obs_data_t *settings)
 		lt->duration = (double)obs_data_get_int(settings, "duration");
 		const bool conference = strcmp(obs_data_get_string(settings, "theme"), "conference") == 0;
 		const std::string color = cleanColor(obs_data_get_string(settings, "color"));
-		themeChanged = lt->theme != (conference ? "conference" : "barrington") || (conference && lt->color != color);
+		themeChanged = lt->theme != (conference ? "conference" : "barrington") ||
+			       (conference && lt->color != color);
 		lt->theme = conference ? "conference" : "barrington";
 		lt->color = color;
 		if (reloaded)
@@ -502,12 +503,15 @@ static obs_properties_t *lt_properties(void *data)
 	}
 	obs_properties_add_button(props, "hide", "Hide", lt_hide_button);
 
-	obs_property_t *theme = obs_properties_add_list(props, "theme", "Theme", OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_STRING);
+	obs_property_t *theme =
+		obs_properties_add_list(props, "theme", "Theme", OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_STRING);
 	obs_property_list_add_string(theme, "Barrington (name over a large B)", "barrington");
 	obs_property_list_add_string(theme, "Conference (name with a subtitle under it)", "conference");
-	obs_property_set_long_description(theme, "The BGH LIVE Controller sets this from Settings → Scene collections.");
+	obs_property_set_long_description(theme,
+					  "The BGH LIVE Controller sets this from Settings → Scene collections.");
 	obs_property_t *color = obs_properties_add_text(props, "color", "Conference colour (hex)", OBS_TEXT_DEFAULT);
-	obs_property_set_long_description(color, "Like #132932. Shown at the same see-through level as the Barrington theme.");
+	obs_property_set_long_description(color,
+					  "Like #132932. Shown at the same see-through level as the Barrington theme.");
 
 	obs_property_t *from = obs_properties_add_list(props, "names_from", "Names come from", OBS_COMBO_TYPE_LIST,
 						       OBS_COMBO_FORMAT_STRING);

@@ -203,10 +203,11 @@ static bool td_reload_button(obs_properties_t *, obs_property_t *, void *data)
 static obs_properties_t *td_properties(void *)
 {
 	obs_properties_t *props = obs_properties_create();
-	obs_properties_add_text(props, "info",
-				"Hymns and Bible verses are chosen in the BGH LIVE Controller. Keep this source at the top "
-				"of the scenes where they should appear.",
-				OBS_TEXT_INFO);
+	obs_properties_add_text(
+		props, "info",
+		"Hymns and Bible verses are chosen in the BGH LIVE Controller. Keep this source at the top "
+		"of the scenes where they should appear.",
+		OBS_TEXT_INFO);
 	obs_properties_add_button(props, "test", "Show a test verse", td_test_button);
 	obs_properties_add_button(props, "clear", "Clear", td_clear_button);
 	obs_properties_add_path(props, "design_file", "Custom design (optional)", OBS_PATH_FILE,
