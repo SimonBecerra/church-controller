@@ -1,0 +1,357 @@
+<!doctype html>
+<!--
+  BGH LIVE scripture and hymn box
+
+  OBS's "Scripture & Hymns" source draws this page full-screen and tells it what to show with one event:
+    window event "churchText", detail = { action: "show", slide: {...} }   or   { action: "clear" }
+  slide.kind = "hymn":  book, logo (data: URL), number, title, label, lines[], page, pages
+                        intro: true = just the logo and number, held until the next slide
+  slide.kind = "verse": reference, translation, text, verses[{n, text}], page, pages
+
+  Hymns: the hymn book's logo and number appear in a small box (and hold there for an intro slide);
+  the next slide widens the box and the words replace them, a few lines at a time. Going back to the
+  intro slide shrinks it back to the logo and number. Next lines cross-fade in the same box. Clearing (Done)
+  reverses it: the words fade, the empty box shrinks back to its small size, then fades away
+  (the logo and number don't come back).
+  A different hymn closes the old one that way, then opens the new one.
+  Verses: the box is always --verse-wide wide; a verse too long for the usual height makes it glide taller
+  (and back down for a shorter one), never wider.
+  A hymn's box is sized once, when it starts, to fit its longest line (slide.allLines) and the most lines
+  shown at once (slide.rows); it doesn't change size again during that hymn and never grows taller.
+
+  To use your own design, make any .html page that listens for that event and pick it under
+  "Custom design" in the source's settings in OBS. Nothing needs rebuilding.
+  Preview in an ordinary browser: open this file and add ?demo to the address (?demo=hymn, ?demo=verse).
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Scripture and Hymns</title>
+<style>
+  @font-face { font-family: "Montserrat"; src: url("fonts/Montserrat-Variable.ttf") format("truetype"); font-weight: 100 900; }
+
+  :root {
+    /* Change these to restyle without touching anything else */
+    --box: rgba(19, 41, 50, 0.76);     /* #132932 at c2 (76%) opacity */
+    --text: #ffffff;
+    --muted: rgba(255, 255, 255, 0.7);
+    --rule: rgba(255, 255, 255, 0.45);
+    --font: "Montserrat", "Segoe UI", sans-serif;
+    --radius: 0.55vw;
+    --bottom: 6.6vh;                   /* about 72px up from the bottom */
+    --wide: 64vw;                      /* the box's width once it opens (a hymn line too long for it makes it wider) */
+    --widest: 92vw;
+    --verse-wide: 90vw;                /* Bible verses: always this wide; a long verse makes the box taller, never wider */
+    --grow-time: 520ms;                /* how long the verse box takes to grow or shrink */                    /* the most a hymn box can widen to; past that the words shrink */
+    --height: 8.2vw;                   /* about 157px on a 1080p canvas */
+    --lyric-size: 2.15vw;              /* about 41px; long lines shrink to fit */
+    --number-size: 3.9vw;              /* about 75px */
+    --logo-height: 3.9vw;
+    --intro-hold: 1400ms;              /* how long the logo and number show before the box opens */
+    --open-time: 650ms;
+  }
+
+  html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: transparent; }
+
+  .box {
+    position: absolute; left: 50%; bottom: var(--bottom);
+    transform: translateX(-50%);
+    min-height: var(--height); box-sizing: border-box;
+    background: var(--box); border-radius: var(--radius);
+    display: grid; place-items: center;
+    opacity: 0;
+    transition: opacity 380ms ease, width var(--open-time) cubic-bezier(.65, 0, .35, 1), height var(--grow-time) cubic-bezier(.4, 0, .2, 1);
+    overflow: hidden;
+  }
+  .box.in { opacity: 1; }
+  /* Both layers sit in the same grid cell so the box can cross-fade between them */
+  .layer { grid-area: 1 / 1; transition: opacity 320ms ease; }
+  .layer.off { opacity: 0; }
+
+  .intro { display: flex; align-items: center; gap: 1.6vw; padding: 1.4vw 2.2vw; white-space: nowrap; }
+  .intro img { height: var(--logo-height); width: auto; max-width: 14vw; object-fit: contain; display: block; }
+  .intro .book { font-family: var(--font); font-weight: 500; font-size: 1.15vw; letter-spacing: .08em; text-transform: uppercase; color: var(--text); max-width: 14vw; white-space: normal; text-align: center; line-height: 1.15; }
+  .intro .divider { width: 0.07vw; min-width: 1px; align-self: stretch; background: var(--rule); margin: 0.2vw 0; }
+  .intro .num { font-family: var(--font); font-weight: 500; font-size: var(--number-size); color: var(--text); line-height: 1; letter-spacing: -0.01em; }
+
+  .words {
+    width: 100%; box-sizing: border-box; padding: 1.2vw 3vw;
+    font-family: var(--font); font-weight: 500; font-size: var(--lyric-size); line-height: 1.32;
+    color: var(--text); text-align: center;
+  }
+  .words .line { display: block; white-space: nowrap; }
+  /* Verses: a little more room under the words */
+  .words.verse { padding-bottom: 2.2vw; }
+  /* Verses: the reference above the words */
+  .words .ref { display: block; font-weight: 500; font-size: 0.62em; letter-spacing: .02em; color: var(--muted); margin-bottom: 0.35em; }
+  .words sup { font-weight: 500; font-size: 0.5em; color: var(--muted); vertical-align: 0.8em; margin-right: 0.2em; }
+</style>
+</head>
+<body>
+  <div class="box" id="box" aria-live="polite">
+    <div class="layer intro off" id="intro"></div>
+    <div class="layer words off" id="words"></div>
+  </div>
+
+<script>
+  const box = document.getElementById("box");
+  const intro = document.getElementById("intro");
+  const words = document.getElementById("words");
+  const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  const ms = name => parseFloat(css(name)) || 0;
+  const vw = name => window.innerWidth * parseFloat(css(name)) / 100;
+  const wait = t => new Promise(r => setTimeout(r, t));
+  let step = 0;          // a newer command cancels an older sequence still running
+  let current = "";      // which hymn or passage is on screen ("" = nothing)
+
+  const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+  // What counts as the same thing on screen (its next part cross-fades; anything else closes and reopens).
+  // Verses sharing a "group" (one chapter in one translation) are one passage.
+  const itemOf = s => JSON.stringify(s.kind === "hymn" ? ["h", s.book, s.number] : s.group ? ["g", s.group] : ["v", s.reference, s.translation, s.pages > 1 ? "" : s.text]);
+
+  function fillIntro(s) {
+    intro.textContent = "";
+    if (s.logo) { const img = el("img"); img.src = s.logo; img.alt = s.book || ""; intro.appendChild(img); }
+    else intro.appendChild(el("span", "book", s.book || "Hymn"));
+    intro.appendChild(el("span", "divider"));
+    intro.appendChild(el("span", "num", String(s.number || "")));
+  }
+
+  function fillWords(s) {
+    words.textContent = "";
+    words.classList.toggle("verse", s.kind !== "hymn");
+    words.style.fontSize = s.kind === "hymn" && hymnFont ? hymnFont + "px" : "";
+    if (s.kind === "hymn") (s.lines || []).forEach(l => words.appendChild(el("span", "line", l)));
+    else {
+      // The reference above ("Genesis 2:19"); the words below without verse numbers. The KJV needs no credit;
+      // the other translations' terms ask for their abbreviation with the quotation, so it follows the reference.
+      const credit = s.translation && s.translation !== "KJV" ? s.translation : "";
+      words.appendChild(el("span", "ref", [s.reference, credit].filter(Boolean).join("  ·  ")));
+      const body = el("span", "");
+      if (Array.isArray(s.verses) && s.verses.length) s.verses.forEach((v, i) => {
+        if (i) body.appendChild(document.createTextNode(" "));
+        body.appendChild(document.createTextNode(v.text));
+      });
+      else body.textContent = s.text || "";
+      words.appendChild(body);
+    }
+    if (s.kind !== "hymn") fit();
+  }
+
+  /* Hymns: the size is settled once, when the hymn starts, from every line of the whole hymn (slide.allLines),
+     so the box never changes size during the hymn. Width: --wide, or wider if the hymn's longest line needs it
+     (up to --widest; past that the words shrink). Height: fixed for the most lines shown at once (slide.rows);
+     lines never wrap, so the box only ever grows sideways. Measured on an invisible copy. */
+  let hymnW = 0, hymnH = 0, hymnFont = 0;
+  function hymnLayout(s) {
+    words.style.fontSize = "";
+    const base = parseFloat(getComputedStyle(words).fontSize);
+    const lines = (Array.isArray(s.allLines) && s.allLines.length ? s.allLines : s.lines) || [];
+    const m = el("div", "words");
+    m.style.cssText = "position:absolute;left:0;top:0;width:max-content;display:block;visibility:hidden;pointer-events:none;font-size:" + base + "px";
+    lines.forEach(l => m.appendChild(el("span", "line", l)));
+    document.body.appendChild(m);
+    const need = Math.ceil(m.getBoundingClientRect().width) + 2;
+    const padY = parseFloat(getComputedStyle(m).paddingTop) + parseFloat(getComputedStyle(m).paddingBottom);
+    m.remove();
+    const wide = vw("--wide"), widest = vw("--widest");
+    if (need <= widest) { hymnW = Math.max(wide, need); hymnFont = base; }
+    else { hymnW = widest; hymnFont = base * (widest - 2) / need; }
+    const rows = Math.max(1, +s.rows || (s.lines || []).length || 2);
+    hymnH = Math.max(vw("--height"), Math.ceil(rows * hymnFont * 1.32 + padY));
+  }
+  const openWidth = () => (latest && latest.kind === "hymn" && hymnW ? hymnW : vw("--wide")) + "px";
+
+  // Verses: the height the box needs for the words at its fixed width (at least the usual height)
+  function verseHeight() {
+    const m = words.cloneNode(true);
+    m.removeAttribute("id"); m.classList.remove("off");
+    m.style.cssText = `position:absolute;left:0;top:0;visibility:hidden;pointer-events:none;display:block;height:auto;width:${box.getBoundingClientRect().width}px;font-size:${getComputedStyle(words).fontSize}`;
+    document.body.appendChild(m);
+    const h = Math.ceil(m.getBoundingClientRect().height);
+    m.remove();
+    return Math.max(vw("--height"), h);
+  }
+
+  // Shrink the words until each hymn line fits on one line and the box stays a sensible height
+  function fit() {
+    let size = parseFloat(getComputedStyle(words).fontSize);
+    const maxH = window.innerHeight * 0.3;
+    const tooBig = () => [...words.querySelectorAll(".line")].some(l => l.scrollWidth > words.clientWidth - 2) || words.scrollHeight > maxH;
+    for (let i = 0; i < 30 && tooBig() && size > 14; i++) { size *= 0.94; words.style.fontSize = size + "px"; }
+  }
+
+  /* Hymns: phase "intro" = the small box with the logo and number, holding until the next slide;
+     "opening" = the box is widening; "open" = the words are showing. */
+  let phase = "";
+  let latest = null;      // the newest slide for what's on screen
+
+  // The width of the small box around the logo and number
+  function smallWidth() {
+    const wasW = box.style.width, wasT = box.style.transition, wordsD = words.style.display;
+    box.style.transition = "none"; words.style.display = "none"; box.style.width = "auto";
+    const w = box.getBoundingClientRect().width;
+    box.style.width = wasW; words.style.display = wordsD; void box.offsetWidth; box.style.transition = wasT;
+    return w;
+  }
+
+  // Widen the box and bring in the words of the newest slide
+  async function openOut(mine) {
+    phase = "opening";
+    fillWords(latest);                    // sized for the full width
+    words.style.display = "none";
+    box.style.width = openWidth();
+    await wait(ms("--open-time") + 150); if (mine !== step) return;
+    intro.classList.add("off");
+    await wait(300); if (mine !== step) return;
+    words.style.display = "";
+    fillWords(latest);
+    void words.offsetWidth;
+    words.classList.remove("off");
+    phase = "open";
+  }
+
+  // Back to the small box with the logo and number (Back from the first lines)
+  async function closeIn(mine) {
+    words.classList.add("off");
+    await wait(320); if (mine !== step) return;
+    const small = smallWidth();
+    words.style.display = "none";
+    intro.classList.remove("off");
+    box.style.width = small + "px";
+    await wait(ms("--open-time")); if (mine !== step) return;
+    phase = "intro";
+  }
+
+  async function show(s) {
+    const item = itemOf(s);
+    if (current === item && box.classList.contains("in")) {
+      latest = s;
+      if (s.kind === "hymn") {
+        if (phase === "opening") return;                      // the opening ends on this slide
+        const mine = ++step;
+        if (s.intro) { if (phase === "open") await closeIn(mine); return; }
+        if (phase === "intro") return openOut(mine);
+      }
+      // Next lines of the same hymn or passage: cross-fade the words only
+      const mine = ++step;
+      words.classList.add("off");
+      await wait(330); if (mine !== step) return;
+      fillWords(latest);
+      if (latest.kind !== "hymn") {
+        // A longer (or shorter) verse: the box glides taller or shorter, keeping its width, then the words fade in
+        const was = box.getBoundingClientRect().height, h = verseHeight();
+        if (Math.abs(h - was) > 1) {
+          box.style.height = h + "px";
+          await wait(ms("--grow-time") * 0.7); if (mine !== step) return;
+        }
+      }
+      words.classList.remove("off");
+      return;
+    }
+    const mine = ++step;
+    // Something else was showing: close it first (a hymn closes the way it opened)
+    if (box.classList.contains("in") && !(await close(mine))) return;
+    current = item; latest = s; phase = "";
+    box.style.transition = "none";
+    words.classList.add("off");
+
+    if (s.kind === "hymn") {
+      // The hymn's size is settled now, for the whole hymn: the height straight away, the width when it opens
+      hymnLayout(s);
+      box.style.height = hymnH + "px";
+      // 1. The logo and number in a small box
+      fillIntro(s);
+      const img = intro.querySelector("img");
+      if (img) { try { await img.decode(); } catch (e) {} if (mine !== step) return; }
+      intro.classList.remove("off");
+      words.style.display = "none";       // the words wait, out of the way, while the box is small
+      box.style.width = "auto";
+      const small = box.getBoundingClientRect().width;
+      box.style.width = small + "px";
+      void box.offsetWidth;
+      box.style.transition = "";
+      box.classList.add("in");
+      phase = "intro";
+      // An intro slide holds here until the next slide; any other slide carries straight on
+      if (s.intro) return;
+      await wait(380 + ms("--intro-hold")); if (mine !== step) return;
+      if (phase === "intro") await openOut(mine);
+    } else {
+      hymnFont = 0; intro.textContent = ""; intro.classList.add("off");
+      box.style.width = vw("--verse-wide") + "px";
+      words.style.display = "";
+      fillWords(s);
+      box.style.height = verseHeight() + "px";
+      void box.offsetWidth;
+      box.style.transition = "";
+      box.classList.add("in");
+      words.classList.remove("off");
+      phase = "open";
+    }
+  }
+
+  // Take the box down. A hymn reverses its opening without the logo and number: the words fade,
+  // the empty box shrinks to its small size, then fades away. A passage fades away.
+  // Returns false if a newer command arrived part-way.
+  async function close(mine) {
+    const hymn = current.startsWith('["h"') && intro.childNodes.length;
+    if (hymn && phase !== "intro") {
+      // The words fade, then the empty box shrinks to the small size (the logo and number stay hidden)
+      words.classList.add("off");
+      await wait(320); if (mine !== step) return false;
+      const small = smallWidth();
+      words.style.display = "none";
+      box.style.width = small + "px";
+      await wait(ms("--open-time") + 150); if (mine !== step) return false;
+    } else if (hymn) {
+      // Only the logo and number were up: they fade out first, then the box
+      intro.classList.add("off");
+      await wait(320); if (mine !== step) return false;
+    }
+    box.classList.remove("in");
+    await wait(400);
+    words.style.display = "";
+    return mine === step;
+  }
+
+  async function clear() {
+    const mine = ++step;
+    if (box.classList.contains("in")) await close(mine);
+    if (mine === step) { current = ""; latest = null; phase = ""; }
+  }
+
+  window.addEventListener("churchText", (e) => {
+    let d = e.detail || {};
+    if (typeof d === "string") { try { d = JSON.parse(d); } catch { d = {}; } }
+    if (d.action === "show" && d.slide && d.slide.kind) show(d.slide);
+    else clear();
+  });
+  window.addEventListener("resize", () => {
+    if (!current) return;
+    if (latest && latest.kind === "hymn") { hymnLayout(latest); box.style.height = hymnH + "px"; if (phase === "open") { fillWords(latest); box.style.width = openWidth(); } }
+    else { box.style.width = vw("--verse-wide") + "px"; fillWords(latest); box.style.height = verseHeight() + "px"; }
+  });
+
+  // Preview outside OBS: ?demo (a hymn, then a verse), ?demo=hymn, ?demo=verse
+  const q = new URLSearchParams(location.search);
+  if (q.has("demo")) {
+    document.body.style.background = q.get("bg") || "#000";
+    const logo = "data:image/svg+xml," + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 230 90"><g fill="#fff" font-family="Georgia,serif" text-anchor="middle"><text x="115" y="20" font-size="15">SAMPLE</text><text x="115" y="50" font-size="30" font-weight="700">HYMNS</text><text x="115" y="80" font-size="22">OF WORSHIP</text></g></svg>');
+    const hymn = (lines, page) => ({ kind: "hymn", key: "h" + page, book: "Sample Hymns", logo, number: 1, title: "Amazing Grace", label: "Verse 1", lines, page, pages: 2 });
+    const slides = [
+      { ...hymn([], 0), intro: true, key: "h0" },
+      hymn(["Amazing grace! how sweet the sound", "That saved a wretch like me!"], 1),
+      hymn(["I once was lost, but now am found;", "Was blind, but now I see."], 2),
+      { kind: "verse", key: "v1", reference: "John 3:16", translation: "KJV", page: 1, pages: 1,
+        verses: [{ n: 16, text: "For God so loved the world, that he gave his only begotten Son, that whosoever believeth in him should not perish, but have everlasting life." }] }
+    ];
+    const only = q.get("demo");
+    const list = only === "verse" ? [slides[3]] : only === "hymn" ? slides.slice(0, 3) : slides;
+    let i = 0;
+    const next = () => { show(list[i++ % list.length]); setTimeout(next, i === 1 ? 6000 : 4000); };
+    document.fonts.ready.then(() => setTimeout(next, 200));
+  }
+</script>
+</body>
+</html>

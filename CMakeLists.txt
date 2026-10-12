@@ -34,6 +34,9 @@ if(ENABLE_QT)
   )
 endif()
 
-target_sources(${CMAKE_PROJECT_NAME} PRIVATE src/plugin-main.cpp)
+target_sources(
+  ${CMAKE_PROJECT_NAME}
+  PRIVATE src/plugin-main.cpp src/browser-page.cpp src/lower-third.cpp src/text-display.cpp
+)
 
 set_target_properties_plugin(${CMAKE_PROJECT_NAME} PROPERTIES OUTPUT_NAME ${_name})
