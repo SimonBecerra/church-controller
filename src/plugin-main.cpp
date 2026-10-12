@@ -31,6 +31,7 @@
 
 #include <obs-module.h>
 #include <obs-frontend-api.h>
+#include <util/config-file.h>
 
 #include <QApplication>
 #include <QCheckBox>
@@ -56,6 +57,7 @@
 #include <memory>
 
 #ifdef _WIN32
+#define NOMINMAX
 #include <windows.h>
 #include <shellapi.h>
 #include <shlobj.h>
@@ -215,8 +217,8 @@ static QPair<QString, QString> parseRow(QLabel *l)
 {
 	const QString html = l->text();
 	QString title, detail;
-	QRegularExpressionMatch m = QRegularExpression("<big>(.*?)</big>", QRegularExpression::DotMatchesEverythingOption)
-					     .match(html);
+	QRegularExpressionMatch m =
+		QRegularExpression("<big>(.*?)</big>", QRegularExpression::DotMatchesEverythingOption).match(html);
 	QTextDocument doc;
 	if (m.hasMatch()) {
 		doc.setHtml(m.captured(1));
@@ -240,8 +242,9 @@ static void openYouTubeDialog(const QString &jobId, const char *eventName, std::
 		return emitResult(eventName, jobId, false, "ALREADY_LIVE", "OBS is already streaming.");
 	// Check the sign-in first: OBS only opens its YouTube dialog when an account is connected
 	if (!youtubeSignedIn())
-		return emitResult(eventName, jobId, false, "NOT_SIGNED_IN",
-				  "OBS isn't signed in to YouTube. In OBS, open Settings > Stream and press Connect Account.");
+		return emitResult(
+			eventName, jobId, false, "NOT_SIGNED_IN",
+			"OBS isn't signed in to YouTube. In OBS, open Settings > Stream and press Connect Account.");
 	if (findYouTubeDialog() || QApplication::activeModalWidget())
 		return emitResult(eventName, jobId, false, "OBS_BUSY", "Another window is open in OBS.");
 
@@ -250,7 +253,8 @@ static void openYouTubeDialog(const QString &jobId, const char *eventName, std::
 	// SetupBroadcast is OBS's own slot behind the "Manage Broadcast" button. It shows the dialog with exec(),
 	// so it's queued; our timers keep running inside the dialog's event loop.
 	if (!QMetaObject::invokeMethod(main, "SetupBroadcast", Qt::QueuedConnection))
-		return emitResult(eventName, jobId, false, "DIALOG_CHANGED", "This version of OBS has no SetupBroadcast action.");
+		return emitResult(eventName, jobId, false, "DIALOG_CHANGED",
+				  "This version of OBS has no SetupBroadcast action.");
 
 	waitFor([] { return findYouTubeDialog() != nullptr || !visibleMessageBoxText().isEmpty(); }, 8000,
 		[=](bool appeared) {
@@ -259,8 +263,9 @@ static void openYouTubeDialog(const QString &jobId, const char *eventName, std::
 			const QString box = visibleMessageBoxText();
 			if (!box.isEmpty())
 				return emitResult(eventName, jobId, false, "SIGN_IN_EXPIRED", box);
-			emitResult(eventName, jobId, false, appeared ? "OBS_BUSY" : "NOT_SIGNED_IN",
-				   "OBS didn't open its YouTube dialog. Check that OBS is connected to YouTube under Settings > Stream.");
+			emitResult(
+				eventName, jobId, false, appeared ? "OBS_BUSY" : "NOT_SIGNED_IN",
+				"OBS didn't open its YouTube dialog. Check that OBS is connected to YouTube under Settings > Stream.");
 		});
 }
 
@@ -274,7 +279,8 @@ static void waitForStreamStart(const QString &jobId)
 			const QString box = visibleMessageBoxText();
 			if (!box.isEmpty())
 				return emitResult("BroadcastResult", jobId, false, "YOUTUBE_ERROR", box);
-			emitResult("BroadcastResult", jobId, false, "TIMEOUT", "OBS didn't start streaming. Check OBS on the main monitor.");
+			emitResult("BroadcastResult", jobId, false, "TIMEOUT",
+				   "OBS didn't start streaming. Check OBS on the main monitor.");
 		});
 }
 
@@ -327,34 +333,37 @@ static void reqListBroadcasts(obs_data_t *, obs_data_t *response, void *)
 		openYouTubeDialog(jobId, "BroadcastList", [jobId](QDialog *dlg) {
 			auto *tabs = child<QTabWidget>(dlg, "tabWidget");
 			if (!tabs)
-				return emitResult("BroadcastList", jobId, false, "DIALOG_CHANGED", "OBS's YouTube dialog has changed.");
+				return emitResult("BroadcastList", jobId, false, "DIALOG_CHANGED",
+						  "OBS's YouTube dialog has changed.");
 			tabs->setCurrentIndex(1); // "Select Existing Broadcast"
 			QPointer<QDialog> guard(dlg);
 			// OBS loads the list from YouTube in the background; wait for rows (or give up after 10 s = none).
-			waitFor([guard] { return guard && !broadcastRows(guard).isEmpty(); }, 10000, [jobId, guard](bool) {
-				obs_data_t *data = obs_data_create();
-				obs_data_array_t *arr = obs_data_array_create();
-				if (guard) {
-					const QList<QLabel *> rows = broadcastRows(guard);
-					for (int i = 0; i < rows.size(); ++i) {
-						const auto [title, detail] = parseRow(rows[i]);
-						obs_data_t *item = obs_data_create();
-						obs_data_set_int(item, "index", i);
-						obs_data_set_string(item, "title", title.toUtf8().constData());
-						obs_data_set_string(item, "detail", detail.toUtf8().constData());
-						obs_data_array_push_back(arr, item);
-						obs_data_release(item);
+			waitFor([guard] { return guard && !broadcastRows(guard).isEmpty(); }, 10000,
+				[jobId, guard](bool) {
+					obs_data_t *data = obs_data_create();
+					obs_data_array_t *arr = obs_data_array_create();
+					if (guard) {
+						const QList<QLabel *> rows = broadcastRows(guard);
+						for (int i = 0; i < rows.size(); ++i) {
+							const auto [title, detail] = parseRow(rows[i]);
+							obs_data_t *item = obs_data_create();
+							obs_data_set_int(item, "index", i);
+							obs_data_set_string(item, "title", title.toUtf8().constData());
+							obs_data_set_string(item, "detail",
+									    detail.toUtf8().constData());
+							obs_data_array_push_back(arr, item);
+							obs_data_release(item);
+						}
+						// Close OBS's dialog the normal way (stops its background work)
+						if (auto *cancel = child<QPushButton>(guard, "cancelButton"))
+							cancel->click();
+						else
+							guard->reject();
 					}
-					// Close OBS's dialog the normal way (stops its background work)
-					if (auto *cancel = child<QPushButton>(guard, "cancelButton"))
-						cancel->click();
-					else
-						guard->reject();
-				}
-				obs_data_set_array(data, "broadcasts", arr);
-				obs_data_array_release(arr);
-				emitResult("BroadcastList", jobId, true, "OK", "", data);
-			});
+					obs_data_set_array(data, "broadcasts", arr);
+					obs_data_array_release(arr);
+					emitResult("BroadcastList", jobId, true, "OK", "", data);
+				});
 		});
 	});
 }
@@ -371,9 +380,8 @@ static void reqStartBroadcast(obs_data_t *request, obs_data_t *response, void *)
 	const QString description = obs_data_get_string(request, "description");
 	const QString privacy = obs_data_get_string(request, "privacyStatus"); // public | unlisted | private
 	const QString existingTitle = obs_data_get_string(request, "broadcastTitle");
-	const long long existingIndex = obs_data_has_user_value(request, "broadcastIndex")
-						? obs_data_get_int(request, "broadcastIndex")
-						: -1;
+	const long long existingIndex =
+		obs_data_has_user_value(request, "broadcastIndex") ? obs_data_get_int(request, "broadcastIndex") : -1;
 
 	const QString jobId = QString::number(nextJob++);
 	obs_data_set_bool(response, "accepted", true);
@@ -384,7 +392,8 @@ static void reqStartBroadcast(obs_data_t *request, obs_data_t *response, void *)
 			auto *tabs = child<QTabWidget>(dlg, "tabWidget");
 			auto *okButton = child<QPushButton>(dlg, "okButton");
 			if (!tabs || !okButton)
-				return emitResult("BroadcastResult", jobId, false, "DIALOG_CHANGED", "OBS's YouTube dialog has changed.");
+				return emitResult("BroadcastResult", jobId, false, "DIALOG_CHANGED",
+						  "OBS's YouTube dialog has changed.");
 
 			if (mode == "existing") {
 				/* ---------- Select an existing broadcast ---------- */
@@ -393,27 +402,33 @@ static void reqStartBroadcast(obs_data_t *request, obs_data_t *response, void *)
 				waitFor([guard] { return guard && !broadcastRows(guard).isEmpty(); }, 10000,
 					[=](bool found) {
 						if (!guard)
-							return emitResult("BroadcastResult", jobId, false, "YOUTUBE_ERROR", "OBS's dialog closed.");
+							return emitResult("BroadcastResult", jobId, false,
+									  "YOUTUBE_ERROR", "OBS's dialog closed.");
 						if (!found)
-							return emitResult("BroadcastResult", jobId, false, "NOT_FOUND",
-									  "OBS shows no upcoming broadcasts. Finish in OBS.");
+							return emitResult(
+								"BroadcastResult", jobId, false, "NOT_FOUND",
+								"OBS shows no upcoming broadcasts. Finish in OBS.");
 						// Match by title (index only breaks ties), so a reordered list can't pick the wrong one
 						QLabel *pick = nullptr;
 						const QList<QLabel *> rows = broadcastRows(guard);
 						for (int i = 0; i < rows.size(); ++i)
-							if (parseRow(rows[i]).first == existingTitle && (!pick || i == existingIndex))
+							if (parseRow(rows[i]).first == existingTitle &&
+							    (!pick || i == existingIndex))
 								pick = rows[i];
 						if (!pick)
-							return emitResult("BroadcastResult", jobId, false, "NOT_FOUND",
-									  "That broadcast isn't in OBS's list anymore. Finish in OBS.");
-						QMetaObject::invokeMethod(pick, "clicked"); // same as tapping the row in OBS
+							return emitResult(
+								"BroadcastResult", jobId, false, "NOT_FOUND",
+								"That broadcast isn't in OBS's list anymore. Finish in OBS.");
+						QMetaObject::invokeMethod(pick,
+									  "clicked"); // same as tapping the row in OBS
 						QTimer::singleShot(150, [=] {
 							if (!guard)
 								return;
 							auto *ok = child<QPushButton>(guard, "okButton");
 							if (!ok || !ok->isEnabled())
-								return emitResult("BroadcastResult", jobId, false, "INCOMPLETE",
-										  "OBS needs more information in its dialog. Finish in OBS.");
+								return emitResult(
+									"BroadcastResult", jobId, false, "INCOMPLETE",
+									"OBS needs more information in its dialog. Finish in OBS.");
 							ok->click();
 							waitForStreamStart(jobId);
 						});
@@ -428,10 +443,12 @@ static void reqStartBroadcast(obs_data_t *request, obs_data_t *response, void *)
 			auto *remember = child<QCheckBox>(dlg, "checkRememberSettings");
 			auto *later = child<QCheckBox>(dlg, "checkScheduledLater");
 			if (!titleEdit || !descEdit || !privacyBox || !remember)
-				return emitResult("BroadcastResult", jobId, false, "DIALOG_CHANGED", "OBS's YouTube dialog has changed.");
+				return emitResult("BroadcastResult", jobId, false, "DIALOG_CHANGED",
+						  "OBS's YouTube dialog has changed.");
 			const int privacyIndex = privacyBox->findData(privacy);
 			if (privacyIndex < 0)
-				return emitResult("BroadcastResult", jobId, false, "DIALOG_CHANGED", "OBS's privacy choices have changed.");
+				return emitResult("BroadcastResult", jobId, false, "DIALOG_CHANGED",
+						  "OBS's privacy choices have changed.");
 
 			tabs->setCurrentIndex(0);
 			titleEdit->setText(title);
@@ -445,17 +462,21 @@ static void reqStartBroadcast(obs_data_t *request, obs_data_t *response, void *)
 			QPointer<QDialog> guard(dlg);
 			QTimer::singleShot(150, [=] {
 				if (!guard)
-					return emitResult("BroadcastResult", jobId, false, "YOUTUBE_ERROR", "OBS's dialog closed.");
-				const bool filled = titleEdit->text() == title && descEdit->toPlainText() == description &&
-						    privacyBox->currentData().toString() == privacy && remember->isChecked() &&
-						    (!later || !later->isChecked());
+					return emitResult("BroadcastResult", jobId, false, "YOUTUBE_ERROR",
+							  "OBS's dialog closed.");
+				const bool filled = titleEdit->text() == title &&
+						    descEdit->toPlainText() == description &&
+						    privacyBox->currentData().toString() == privacy &&
+						    remember->isChecked() && (!later || !later->isChecked());
 				if (!filled)
-					return emitResult("BroadcastResult", jobId, false, "DIALOG_CHANGED",
-							  "The controller couldn't fill in OBS's dialog. Finish in OBS.");
+					return emitResult(
+						"BroadcastResult", jobId, false, "DIALOG_CHANGED",
+						"The controller couldn't fill in OBS's dialog. Finish in OBS.");
 				auto *ok = child<QPushButton>(guard, "okButton");
 				if (!ok || !ok->isEnabled())
-					return emitResult("BroadcastResult", jobId, false, "INCOMPLETE",
-							  "OBS needs more information in its dialog (for example \"Made for kids\"). Finish in OBS.");
+					return emitResult(
+						"BroadcastResult", jobId, false, "INCOMPLETE",
+						"OBS needs more information in its dialog (for example \"Made for kids\"). Finish in OBS.");
 				ok->click(); // OBS's "Create broadcast and start streaming"
 				waitForStreamStart(jobId);
 			});
@@ -494,8 +515,8 @@ static void openControllerIfWanted()
 	if (!enabled || exe.isEmpty())
 		return;
 
-	HINSTANCE r = ShellExecuteW(nullptr, L"open", reinterpret_cast<LPCWSTR>(exe.utf16()), L"--opened-by-obs", nullptr,
-				    SW_SHOWNORMAL);
+	HINSTANCE r = ShellExecuteW(nullptr, L"open", reinterpret_cast<LPCWSTR>(exe.utf16()), L"--opened-by-obs",
+				    nullptr, SW_SHOWNORMAL);
 	if (reinterpret_cast<INT_PTR>(r) <= 32)
 		LOG(LOG_WARNING, "couldn't open the controller at %s", exe.toUtf8().constData());
 	else
