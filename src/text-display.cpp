@@ -200,7 +200,7 @@ static bool td_reload_button(obs_properties_t *, obs_property_t *, void *data)
 	return false;
 }
 
-static obs_properties_t *td_properties(void *)
+static obs_properties_t *td_properties(void *data)
 {
 	obs_properties_t *props = obs_properties_create();
 	obs_properties_add_text(
@@ -208,11 +208,11 @@ static obs_properties_t *td_properties(void *)
 		"Hymns and Bible verses are chosen in the BGH LIVE Controller. Keep this source at the top "
 		"of the scenes where they should appear.",
 		OBS_TEXT_INFO);
-	obs_properties_add_button(props, "test", "Show a test verse", td_test_button);
-	obs_properties_add_button(props, "clear", "Clear", td_clear_button);
+	obs_properties_add_button2(props, "test", "Show a test verse", td_test_button, data);
+	obs_properties_add_button2(props, "clear", "Clear", td_clear_button, data);
 	obs_properties_add_path(props, "design_file", "Custom design (optional)", OBS_PATH_FILE,
 				"Web pages (*.html *.htm)", nullptr);
-	obs_properties_add_button(props, "reload", "Reload design", td_reload_button);
+	obs_properties_add_button2(props, "reload", "Reload design", td_reload_button, data);
 	return props;
 }
 

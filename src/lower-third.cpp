@@ -499,9 +499,9 @@ static obs_properties_t *lt_properties(void *data)
 	for (size_t i = 0; i < names.size() && i < LT_BUTTONS; ++i) {
 		const std::string id = "show_" + std::to_string(i + 1);
 		const std::string label = "Show / hide: " + names[i];
-		obs_properties_add_button(props, id.c_str(), label.c_str(), showFns[i]);
+		obs_properties_add_button2(props, id.c_str(), label.c_str(), showFns[i], data);
 	}
-	obs_properties_add_button(props, "hide", "Hide", lt_hide_button);
+	obs_properties_add_button2(props, "hide", "Hide", lt_hide_button, data);
 
 	obs_property_t *theme =
 		obs_properties_add_list(props, "theme", "Theme", OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_STRING);
@@ -532,7 +532,7 @@ static obs_properties_t *lt_properties(void *data)
 
 	obs_properties_add_path(props, "design_file", "Custom design (optional)", OBS_PATH_FILE,
 				"Web pages (*.html *.htm)", nullptr);
-	obs_properties_add_button(props, "reload", "Reload design", lt_reload_button);
+	obs_properties_add_button2(props, "reload", "Reload design", lt_reload_button, data);
 	return props;
 }
 
