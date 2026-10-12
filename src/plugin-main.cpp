@@ -182,9 +182,10 @@ static QDialog *findYouTubeDialog()
 }
 
 // Any visible OBS message box (sign-in prompts, YouTube errors). Returns its text, or empty.
+// Any message OBS is showing, including ones that belong to its YouTube window (those aren't top-level)
 static QString visibleMessageBoxText()
 {
-	for (QWidget *w : QApplication::topLevelWidgets())
+	for (QWidget *w : QApplication::allWidgets())
 		if (auto *box = qobject_cast<QMessageBox *>(w); box && box->isVisible()) {
 			QString t = box->text();
 			if (!box->informativeText().isEmpty())
@@ -273,15 +274,35 @@ static void openYouTubeDialog(const QString &jobId, const char *eventName, std::
 }
 
 // After pressing OBS's go-live button: wait until OBS is streaming, or report what OBS showed instead.
+// After "Create broadcast and start streaming": wait for the stream, an error message, or OBS's YouTube window
+// being closed without the stream starting (cancelled, or closed after an error).
 static void waitForStreamStart(const QString &jobId)
 {
-	waitFor([] { return obs_frontend_streaming_active() || !visibleMessageBoxText().isEmpty(); }, 45000,
+	auto closedSince = std::make_shared<qint64>(0);
+	waitFor(
+		[closedSince] {
+			if (obs_frontend_streaming_active() || !visibleMessageBoxText().isEmpty())
+				return true;
+			if (findYouTubeDialog()) {
+				*closedSince = 0;
+				return false;
+			}
+			// OBS closes its window itself when it succeeds, then starts streaming a moment later
+			const qint64 now = QDateTime::currentMSecsSinceEpoch();
+			if (!*closedSince)
+				*closedSince = now;
+			return now - *closedSince > 15000;
+		},
+		60000,
 		[=](bool) {
 			if (obs_frontend_streaming_active())
 				return emitResult("BroadcastResult", jobId, true, "OK", "Streaming started.");
 			const QString box = visibleMessageBoxText();
 			if (!box.isEmpty())
 				return emitResult("BroadcastResult", jobId, false, "YOUTUBE_ERROR", box);
+			if (!findYouTubeDialog())
+				return emitResult("BroadcastResult", jobId, false, "CANCELLED",
+						  "OBS's YouTube window was closed without the stream starting.");
 			emitResult("BroadcastResult", jobId, false, "TIMEOUT",
 				   "OBS didn't start streaming. Check OBS on the main monitor.");
 		});
