@@ -78,9 +78,10 @@ static std::atomic<bool> jobRunning{false};
 /* ------------------------------------------------------------------ helpers */
 
 /*
- * Signed in to YouTube? OBS keeps the connected account in the current profile's settings:
- *   [Auth] Type = "YouTube - RTMPS" (the connected service), and in that service's section a RefreshToken.
- * "Disconnect Account" removes Auth/Type. (Auth.cpp / OAuth.cpp in OBS 32.2.2)
+ * Signed in to YouTube? OBS keeps the connected account in the current profile's settings (basic.ini):
+ *   [Auth] Type = "YouTube - RTMPS" (the connected service), and the tokens in a section named
+ *   "YouTube" (YoutubeAuth's SECTION_NAME), with RefreshToken set while signed in.
+ * "Disconnect Account" removes Auth/Type. (frontend/oauth/Auth.cpp and YoutubeAuth.cpp in OBS)
  */
 static bool youtubeSignedIn()
 {
@@ -90,7 +91,9 @@ static bool youtubeSignedIn()
 	const char *type = config_get_string(cfg, "Auth", "Type");
 	if (!type || !strstr(type, "YouTube"))
 		return false;
-	const char *token = config_get_string(cfg, type, "RefreshToken");
+	const char *token = config_get_string(cfg, "YouTube", "RefreshToken");
+	if (!token || !*token)
+		token = config_get_string(cfg, type, "RefreshToken"); // in case a future OBS keeps it by service name
 	return token && *token;
 }
 
