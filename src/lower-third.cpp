@@ -15,9 +15,10 @@
  *   It hides itself after the number of seconds in the settings (8 by default; 0 = stays until hidden).
  *
  * Themes
- *   "barrington" (the name over a cropped B) or "conference" (the name in Spectral Bold with a subtitle under it,
- *   such as where the speaker is from). Conference has its own box colour (a hex code, #132932 to start with),
- *   always at the same 76% opacity as Barrington. Saved in the source's settings, so each scene collection keeps its own;
+ *   "barrington" (the name over a cropped B), "conference" (the name in Spectral Bold with a subtitle under it,
+ *   such as where the speaker is from), "christmas" (red, with a sprig decoration on its left edge) or
+ *   "sundayschool" (blue, with circles bouncing inside it). Conference has its own box colour (a hex code,
+ *   #132932 to start with), always at the same 76% opacity as Barrington. Saved in the source's settings, so each scene collection keeps its own;
  *   the BGH LIVE Controller sets it from Settings → Scene collections (SetLowerThirdTheme).
  *
  * On / off
@@ -114,6 +115,16 @@ static std::string cleanColor(const char *c)
 	std::string out = "#" + m[1].str();
 	std::transform(out.begin(), out.end(), out.begin(), [](unsigned char ch) { return (char)std::toupper(ch); });
 	return out;
+}
+
+// One of the themes the page knows; anything else -> "barrington"
+static std::string cleanTheme(const char *t)
+{
+	static const char *themes[] = {"barrington", "conference", "christmas", "sundayschool"};
+	for (const char *known : themes)
+		if (t && strcmp(t, known) == 0)
+			return known;
+	return "barrington";
 }
 
 // "Simon Becerra and Nathanael Alicea" -> {"Simon Becerra", "Nathanael Alicea"}
@@ -318,11 +329,11 @@ static void lt_update(void *data, obs_data_t *settings)
 		lt->textSource = obs_data_get_string(settings, "text_source");
 		lt->typedNames = obs_data_get_string(settings, "typed_names");
 		lt->duration = (double)obs_data_get_int(settings, "duration");
-		const bool conference = strcmp(obs_data_get_string(settings, "theme"), "conference") == 0;
+		const std::string theme = cleanTheme(obs_data_get_string(settings, "theme"));
+		const bool conference = theme == "conference";
 		const std::string color = cleanColor(obs_data_get_string(settings, "color"));
-		themeChanged = lt->theme != (conference ? "conference" : "barrington") ||
-			       (conference && lt->color != color);
-		lt->theme = conference ? "conference" : "barrington";
+		themeChanged = lt->theme != theme || (conference && lt->color != color);
+		lt->theme = theme;
 		lt->color = color;
 		if (reloaded)
 			lt->showing.clear(); // the page starts empty after a reload
@@ -507,6 +518,8 @@ static obs_properties_t *lt_properties(void *data)
 		obs_properties_add_list(props, "theme", "Theme", OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_STRING);
 	obs_property_list_add_string(theme, "Barrington (name over a large B)", "barrington");
 	obs_property_list_add_string(theme, "Conference (name with a subtitle under it)", "conference");
+	obs_property_list_add_string(theme, "Christmas (red, with a sprig on the left)", "christmas");
+	obs_property_list_add_string(theme, "Sunday School (blue, with bouncing circles)", "sundayschool");
 	obs_property_set_long_description(theme,
 					  "The BGH LIVE Controller sets this from Settings → Scene collections.");
 	obs_property_t *color = obs_properties_add_text(props, "color", "Conference colour (hex)", OBS_TEXT_DEFAULT);
@@ -686,9 +699,8 @@ static void reqSetEnabled(obs_data_t *request, obs_data_t *response, void *)
 
 static void reqSetTheme(obs_data_t *request, obs_data_t *response, void *)
 {
-	const bool conference = strcmp(obs_data_get_string(request, "theme"), "conference") == 0;
 	obs_data_t *change = obs_data_create();
-	obs_data_set_string(change, "theme", conference ? "conference" : "barrington");
+	obs_data_set_string(change, "theme", cleanTheme(obs_data_get_string(request, "theme")).c_str());
 	if (obs_data_has_user_value(request, "color"))
 		obs_data_set_string(change, "color", cleanColor(obs_data_get_string(request, "color")).c_str());
 	updateLowerThirds(request, change, response);
