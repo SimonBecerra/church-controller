@@ -9,8 +9,8 @@
     barrington  the name in Montserrat Medium over a cropped Spectral Bold "B", with an optional subtitle under it
                 in small capitals (Montserrat Medium); the controller sends one only for visiting speakers when it's switched on
     conference  the name and subtitle exactly as Barrington, no "B", in its own colour ("color", a hex code) at
-                the same opacity. Behind them, "Conference" in Yellowtail is written out left to right in a darker
-                shade of that colour while drifting slowly left (cropped by the box)
+                the same opacity. Behind them, "Conference" in Yellowtail in a darker shade of that colour, part of the
+                box: uncovered as the box extends, covered as it closes, drifting slowly left while it's up
     christmas   like Barrington without the "B", in red (#B32929 at the same opacity); a sprig with a star
                 sits on the box's left edge and fades in from the right after the box opens, before the name
     sundayschool  like Barrington without the "B", in solid blue (#449DD1) with darker circles (#2B6689)
@@ -45,8 +45,8 @@
     --font: "Montserrat", "Segoe UI", sans-serif;
     --serif: "Spectral", Georgia, serif;
     --name-size: 2.1vw;                /* Barrington name: about 40px on a 1080p canvas */
-    --script-size: calc(var(--height) * 1.6);    /* Conference: the word "Conference" behind the name */
-    --script-write: 2600ms;            /* how long it takes to write the word out */
+    --script-size: calc(var(--height) * 2.1);    /* Conference: the word "Conference" behind the name */
+    --script-top: calc(var(--height) * -0.62);   /* how far above the box it starts, so the box crops its top */
     --script-pan: 7vw;                 /* how far it drifts left... */
     --script-pan-time: 16s;            /* ...over this long */
     --sub-size: 0.95vw;                /* Barrington subtitle: about 18px, in capitals */
@@ -119,24 +119,17 @@
   .subtitle:empty { display: none; }
 
   /* Conference: "Conference" in Yellowtail behind the name, in a darker shade of the box colour (--script).
-     It's written out by a soft-edged reveal moving left to right (--reveal goes 0% → 112%), and drifts left. */
-  @property --reveal { syntax: "<percentage>"; inherits: false; initial-value: 0%; }
+     It's part of the box: the box's edges crop it (overflow: hidden), so it's uncovered as the box extends and
+     covered again as it closes. Nothing animates it on its own except a slow drift to the left while it's up. */
   .script {
-    position: absolute; left: 1.1vw; top: calc(var(--height) * -0.2);
+    position: absolute; left: 1.1vw; top: var(--script-top);
     font-family: "Yellowtail", cursive; font-weight: 400; font-size: var(--script-size); line-height: 1;
     color: var(--script, #0b1418); white-space: nowrap;
     pointer-events: none; user-select: none; display: none;
-    --reveal: 0%;
-    -webkit-mask-image: linear-gradient(90deg, #000 calc(var(--reveal) - 12%), transparent var(--reveal));
-            mask-image: linear-gradient(90deg, #000 calc(var(--reveal) - 12%), transparent var(--reveal));
-    transform: translateX(0); opacity: 1;
+    transform: translateX(0);
   }
   .lt.conference .script { display: block; }
-  .script.write {
-    --reveal: 112%; transform: translateX(calc(var(--script-pan) * -1));
-    transition: --reveal var(--script-write) cubic-bezier(.45, .05, .55, .95), transform var(--script-pan-time) linear;
-  }
-  .script.fade { opacity: 0; transition: opacity 360ms ease; }
+  .script.drift { transform: translateX(calc(var(--script-pan) * -1)); transition: transform var(--script-pan-time) linear; }
 </style>
 </head>
 <body>
@@ -205,7 +198,6 @@
     else { const q = L < 0.5 ? L * (1 + S) : L + S - L * S, p = 2 * L - q; rgb = [hue(p, q, H + 1 / 3), hue(p, q, H), hue(p, q, H - 1 / 3)]; }
     return "#" + rgb.map(v => Math.max(0, Math.min(255, Math.round(v * 255))).toString(16).padStart(2, "0")).join("").toUpperCase();
   }
-  const SCRIPT_LEAD = 450;   // the name fades in this long after "Conference" starts writing
   const DECO = () => parseFloat(css("--deco-time")) || 450;
 
   // Sunday School: three circles drift around inside the box and bounce off its edges.
@@ -274,7 +266,7 @@
       theme === "conference" && m ? `rgba(${parseInt(m[1], 16)}, ${parseInt(m[2], 16)}, ${parseInt(m[3], 16)}, var(--box-opacity))`
       : theme === "christmas" ? "var(--christmas)" : theme === "sundayschool" ? "var(--sundayschool)" : "");
     // Conference: "Conference" ready to be written, in the darker shade
-    script.classList.remove("write", "fade");
+    script.classList.remove("drift");
     box.style.setProperty("--script", darker(m ? m[0] : "#132932"));
     nameEl.textContent = d.name; subEl.textContent = subtitle;
     const w = widthFor();
@@ -284,6 +276,7 @@
     void box.offsetWidth;
     box.classList.add("up");
     if (theme === "sundayschool") startDots(); else stopDots();
+    if (theme === "conference") { void script.offsetWidth; script.classList.add("drift"); }
     await wait(300); if (mine !== step) return;
     // 2. it extends
     box.style.width = w + "px";
@@ -292,12 +285,6 @@
     if (theme === "christmas") {
       deco.classList.add("on");
       await wait(DECO()); if (mine !== step) return;
-    }
-    // 3. Conference: "Conference" is written out and starts drifting left; the name follows a moment later
-    if (theme === "conference") {
-      void script.offsetWidth;
-      script.classList.add("write");
-      await wait(SCRIPT_LEAD); if (mine !== step) return;
     }
     // 4. the words fade in
     words.classList.add("on");
@@ -310,10 +297,6 @@
     if (deco.classList.contains("on")) {
       deco.classList.remove("on");
       await wait(DECO()); if (mine !== step) return;
-    }
-    if (script.classList.contains("write")) {
-      script.classList.add("fade");
-      await wait(360); if (mine !== step) return;
     }
     box.style.width = css("--height");
     await wait(OPEN()); if (mine !== step) return;
