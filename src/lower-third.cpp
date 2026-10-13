@@ -517,7 +517,7 @@ static obs_properties_t *lt_properties(void *data)
 	obs_property_t *theme =
 		obs_properties_add_list(props, "theme", "Theme", OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_STRING);
 	obs_property_list_add_string(theme, "Barrington (name over a large B)", "barrington");
-	obs_property_list_add_string(theme, "Conference (\"Conference\" written in script behind the name)", "conference");
+	obs_property_list_add_string(theme, "Conference (script word behind the name)", "conference");
 	obs_property_list_add_string(theme, "Christmas (red, with a sprig on the left)", "christmas");
 	obs_property_list_add_string(theme, "Sunday School (blue, with bouncing circles)", "sundayschool");
 	obs_property_set_long_description(theme,
