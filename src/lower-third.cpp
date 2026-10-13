@@ -15,8 +15,8 @@
  *   It hides itself after the number of seconds in the settings (8 by default; 0 = stays until hidden).
  *
  * Themes
- *   "barrington" (the name over a cropped B), "conference" (the name in Spectral Bold with a subtitle under it,
- *   such as where the speaker is from), "christmas" (red, with a sprig decoration on its left edge) or
+ *   "barrington" (the name over a cropped B), "conference" (the name and subtitle as Barrington, with
+ *   "Conference" written out in script behind them in a darker shade of its colour), "christmas" (red, with a sprig decoration on its left edge) or
  *   "sundayschool" (blue, with circles bouncing inside it). Conference has its own box colour (a hex code,
  *   #132932 to start with), always at the same 76% opacity as Barrington. Saved in the source's settings, so each scene collection keeps its own;
  *   the BGH LIVE Controller sets it from Settings → Scene collections (SetLowerThirdTheme).
@@ -517,7 +517,7 @@ static obs_properties_t *lt_properties(void *data)
 	obs_property_t *theme =
 		obs_properties_add_list(props, "theme", "Theme", OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_STRING);
 	obs_property_list_add_string(theme, "Barrington (name over a large B)", "barrington");
-	obs_property_list_add_string(theme, "Conference (name with a subtitle under it)", "conference");
+	obs_property_list_add_string(theme, "Conference (\"Conference\" written in script behind the name)", "conference");
 	obs_property_list_add_string(theme, "Christmas (red, with a sprig on the left)", "christmas");
 	obs_property_list_add_string(theme, "Sunday School (blue, with bouncing circles)", "sundayschool");
 	obs_property_set_long_description(theme,
