@@ -13,7 +13,7 @@
                 box: uncovered as the box extends, covered as it closes, drifting slowly left while it's up
     christmas   like Barrington without the "B", in red (#B32929) easing from deeper at the top to a lighter rose
                 at the bottom, with small snowflakes falling inside; a sprig with a star sits on the box's
-                left edge and fades in from the right after the box opens, before the name
+                left edge and fades in from the right while the box extends, before the name
     sundayschool  like Barrington without the "B", in solid blue (#449DD1) with three big darker circles (#2B6689)
                 bouncing around inside the box and off each other
   Showing: a small box appears, extends to the right, then the words fade in. Hiding: the same in reverse.
@@ -58,7 +58,8 @@
     --height: 8.2vw;                   /* about 157px, the same height as the hymn box */
     --min-width: 33.8vw;               /* about 650px; longer names make it longer */
     --open-time: 600ms;
-    --sub-lag: 150ms;                  /* the subtitle fades in this long after the name */
+    --sub-lag: 150ms;
+    --b-time: 700ms;                   /* Barrington: the B fading in from the left */                  /* the subtitle fades in this long after the name */
     /* Christmas: #B32929 at c2 at the top, easing to a light rose (#D0787A) at the bottom, as in the reference image.
        The bottom stays about as solid as the top, so it looks the same over a light wall or a dark suit. */
     --christmas: linear-gradient(180deg, rgba(179, 41, 41, 0.76) 0%, rgba(208, 120, 122, 0.82) 100%);
@@ -89,6 +90,10 @@
     pointer-events: none; user-select: none;
   }
   .lt.conference .letter, .lt.christmas .letter, .lt.sundayschool .letter { display: none; }
+  /* Barrington: the B fades in from a little to the left as the box opens. Going away it just stays put and the
+     box closes over it, as before (the class comes off only once the box is gone). */
+  .lt.barrington .letter { opacity: 0; margin-left: -0.9vw; }
+  .lt.barrington.b-in .letter { opacity: 1; margin-left: 0; transition: opacity var(--b-time) ease, margin-left var(--b-time) cubic-bezier(.2, .7, .3, 1); }
 
   /* Christmas: the sprig and star on the box's left edge, reaching above and below it */
   .xmas-deco {
@@ -572,6 +577,7 @@
     }
     if (up) { await hideSteps(mine); if (mine !== step) return; }
     current = key;
+    box.classList.remove("b-in");
     THEMES.forEach(t => box.classList.toggle(t, t === theme));
     box.dataset.theme = theme;
     box.dataset.color = String(d.color || "");
@@ -595,15 +601,17 @@
     if (theme === "christmas") startSnow(); else stopSnow();
     // Conference: "Conference" starts being written as soon as the box appears, and starts drifting
     if (theme === "conference") { void script.offsetWidth; script.classList.add("drift", "write"); }
+    // Barrington: the B fades in from the left as the box opens
+    if (theme === "barrington") { void box.offsetWidth; box.classList.add("b-in"); }
     await wait(300); if (mine !== step) return;
-    // 2. it extends
+    // 2. it extends (Christmas: the sprig fades in, sliding in from a little to the right, while it does)
     box.style.width = w + "px";
-    await wait(OPEN()); if (mine !== step) return;
-    // 3. Christmas: the sprig fades in, sliding in from a little to the right
     if (theme === "christmas") {
+      deco.style.transitionDuration = OPEN() + "ms";
       deco.classList.add("on");
-      await wait(DECO()); if (mine !== step) return;
+      setTimeout(() => { deco.style.transitionDuration = ""; }, OPEN() + 50);
     }
+    await wait(OPEN()); if (mine !== step) return;
     // 4. the words fade in
     words.classList.add("on");
   }
@@ -622,7 +630,7 @@
     await wait(OPEN()); if (mine !== step) return;
     box.classList.remove("up");
     await wait(300);
-    if (mine === step) { stopDots(); stopSnow(); }
+    if (mine === step) { stopDots(); stopSnow(); box.classList.remove("b-in"); }
   }
 
   async function hide() {
