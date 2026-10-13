@@ -1,0 +1,79 @@
+// Color Match filter (color-match.cpp). The picture arrives in linear light (the filter is sRGB-aware).
+//   1. gains: white balance, tint and RGB balance, one multiplier per channel, in linear light
+//   2. curve: one tone curve (256 entries) on the gamma-encoded values
+//   3. saturation around each pixel's brightness
+//   4. mixed with the original by strength (0 = untouched, 1 = fully matched)
+
+uniform float4x4 ViewProj;
+uniform texture2d image;
+uniform texture2d curve;
+uniform float3 gains;
+uniform float saturation;
+uniform float strength;
+
+sampler_state textureSampler {
+	Filter   = Linear;
+	AddressU = Clamp;
+	AddressV = Clamp;
+};
+
+sampler_state curveSampler {
+	Filter   = Linear;
+	AddressU = Clamp;
+	AddressV = Clamp;
+};
+
+struct VertData {
+	float4 pos : POSITION;
+	float2 uv : TEXCOORD0;
+};
+
+VertData VSDefault(VertData v_in)
+{
+	VertData v_out;
+	v_out.pos = mul(float4(v_in.pos.xyz, 1.0), ViewProj);
+	v_out.uv = v_in.uv;
+	return v_out;
+}
+
+float3 to_srgb(float3 c)
+{
+	c = max(c, float3(0.0, 0.0, 0.0));
+	return lerp(c * 12.92, 1.055 * pow(c, float3(1.0 / 2.4, 1.0 / 2.4, 1.0 / 2.4)) - 0.055,
+		    step(float3(0.0031308, 0.0031308, 0.0031308), c));
+}
+
+float3 to_linear(float3 c)
+{
+	return lerp(c / 12.92, pow((c + 0.055) / 1.055, float3(2.4, 2.4, 2.4)),
+		    step(float3(0.04045, 0.04045, 0.04045), c));
+}
+
+float curve_at(float x)
+{
+	return curve.Sample(curveSampler, float2(saturate(x) * (255.0 / 256.0) + (0.5 / 256.0), 0.5)).r;
+}
+
+float4 PSColorMatch(VertData v_in) : TARGET
+{
+	float4 px = image.Sample(textureSampler, v_in.uv);
+	float a = px.a;
+	float3 lin = px.rgb / max(a, 0.0001);
+
+	float3 g = saturate(to_srgb(lin * gains));
+	g = float3(curve_at(g.r), curve_at(g.g), curve_at(g.b));
+	float y = dot(g, float3(0.2126, 0.7152, 0.0722));
+	g = saturate(float3(y, y, y) + (g - float3(y, y, y)) * saturation);
+
+	float3 result = lerp(lin, to_linear(g), strength);
+	return float4(result * a, a);
+}
+
+technique Draw
+{
+	pass
+	{
+		vertex_shader = VSDefault(v_in);
+		pixel_shader  = PSColorMatch(v_in);
+	}
+}
