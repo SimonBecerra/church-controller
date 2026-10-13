@@ -9,6 +9,8 @@
   slide.kind = "verse": reference, translation, text, verses[{n, text}], page, pages
   either kind: boxColor ("#B32929") and boxOpacity (0–1): the box's colour, which the controller sets to match
                 the lower third's theme. Left out: #132932 at 76%.
+  either kind: boxStyle "christmas": the Christmas lower third's look instead, a red-to-rose gradient with
+                small snowflakes falling inside the box, behind the words.
 
   Hymns: the hymn book's logo and number appear in a small box (and hold there for an intro slide);
   the next slide widens the box and the words replace them, a few lines at a time. Going back to the
@@ -24,7 +26,7 @@
   To use your own design, make any .html page that listens for that event and pick it under
   "Custom design" in the source's settings in OBS. Nothing needs rebuilding.
   Preview in an ordinary browser: open this file and add ?demo to the address (?demo=hymn, ?demo=verse).
-  Add &box=%23449DD1&opacity=1 to see it in another colour.
+  Add &box=%23449DD1&opacity=1 to see it in another colour, or &christmas for the Christmas look.
 -->
 <html lang="en">
 <head>
@@ -68,6 +70,11 @@
     overflow: hidden;
   }
   .box.in { opacity: 1; }
+  /* Christmas (boxStyle "christmas"): the lower third's gradient, with snow falling behind the words */
+  :root { --christmas: linear-gradient(180deg, rgba(179, 41, 41, 0.76) 0%, rgba(208, 120, 122, 0.82) 100%); }
+  .snow { position: absolute; inset: 0; pointer-events: none; }
+  .flake { position: absolute; left: 0; top: 0; border-radius: 50%; background: #fff; will-change: transform; }
+  .box .layer { position: relative; z-index: 1; }
   /* Both layers sit in the same grid cell so the box can cross-fade between them */
   .layer { grid-area: 1 / 1; transition: opacity 320ms ease; }
   .layer.off { opacity: 0; }
@@ -96,6 +103,7 @@
 </head>
 <body>
   <div class="box" id="box" aria-live="polite">
+    <div class="snow" id="snow" aria-hidden="true"></div>
     <div class="layer intro off" id="intro"></div>
     <div class="layer words off" id="words"></div>
   </div>
@@ -236,13 +244,53 @@
     phase = "intro";
   }
 
-  // The box takes the lower third theme's colour; only the colour changes, never the fonts or sizes
+  // The box takes the lower third theme's colour; only the colour changes, never the fonts or sizes.
+  // Christmas: the gradient and the snow.
   function paint(s) {
     const m = String(s.boxColor || "").match(/^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i);
     const o = typeof s.boxOpacity === "number" && s.boxOpacity >= 0 && s.boxOpacity <= 1 ? s.boxOpacity : 0.76;
-    document.documentElement.style.setProperty("--box",
-      m ? `rgba(${parseInt(m[1], 16)}, ${parseInt(m[2], 16)}, ${parseInt(m[3], 16)}, ${o})` : "");
+    const xmas = s.boxStyle === "christmas";
+    document.documentElement.style.setProperty("--box", xmas ? "var(--christmas)"
+      : m ? `rgba(${parseInt(m[1], 16)}, ${parseInt(m[2], 16)}, ${parseInt(m[3], 16)}, ${o})` : "");
+    if (xmas) snow.start(); else snow.stop();
   }
+
+  /* Snow: small, slightly see-through flakes falling and swaying inside the box (which crops them).
+     They're spread across the widest the box can get, measured from its centre, so they stay put on screen
+     while the box widens or narrows around them. */
+  const snow = (() => {
+    const el = document.getElementById("snow"), flakes = [];
+    let raf = 0, last = 0;
+    const unit = () => vw("--height");   // the same scale as the lower third's snow
+    function frame(now) {
+      const dt = Math.min(0.05, (now - last) / 1000); last = now;
+      const W = box.clientWidth, H = box.clientHeight, u = unit();
+      for (const f of flakes) {
+        f.y += f.vy * dt; f.t += dt;
+        if (f.y > H + f.size) { f.y = -f.size; }
+        const x = W / 2 + f.x + Math.sin(f.t * f.sway + f.phase) * u * 0.05;
+        f.el.style.transform = `translate(${x}px, ${f.y}px)`;
+      }
+      raf = requestAnimationFrame(frame);
+    }
+    function start() {
+      if (raf) return;
+      const u = unit(), field = window.innerWidth * 0.95, H = Math.max(box.clientHeight, u);
+      const n = Math.round(field / u * 6);   // about 6 flakes for each box-height of width
+      for (let i = 0; i < n; i++) {
+        const f = document.createElement("span"); f.className = "flake";
+        const size = u * (0.022 + Math.random() * 0.022);
+        f.style.width = f.style.height = size + "px";
+        f.style.opacity = (0.45 + Math.random() * 0.35).toFixed(2);
+        el.appendChild(f);
+        flakes.push({ el: f, size, x: (Math.random() - 0.5) * field, y: Math.random() * H, vy: u * (0.16 + Math.random() * 0.14),
+                      t: 0, sway: 0.8 + Math.random() * 1.2, phase: Math.random() * 6.3 });
+      }
+      last = performance.now(); raf = requestAnimationFrame(frame);
+    }
+    function stop() { cancelAnimationFrame(raf); raf = 0; el.innerHTML = ""; flakes.length = 0; }
+    return { start, stop };
+  })();
 
   async function show(s) {
     paint(s);
@@ -340,7 +388,7 @@
   async function clear() {
     const mine = ++step;
     if (box.classList.contains("in")) await close(mine);
-    if (mine === step) { current = ""; latest = null; phase = ""; }
+    if (mine === step) { current = ""; latest = null; phase = ""; snow.stop(); }
   }
 
   window.addEventListener("churchText", (e) => {
@@ -370,6 +418,7 @@
     ];
     const only = q.get("demo");
     const tint = q.has("box") ? { boxColor: q.get("box"), boxOpacity: q.has("opacity") ? parseFloat(q.get("opacity")) : undefined } : {};
+    if (q.has("christmas")) tint.boxStyle = "christmas";
     const list = (only === "verse" ? [slides[3]] : only === "hymn" ? slides.slice(0, 3) : slides).map(x => ({ ...x, ...tint }));
     let i = 0;
     const next = () => { show(list[i++ % list.length]); setTimeout(next, i === 1 ? 6000 : 4000); };
