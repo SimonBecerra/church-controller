@@ -11,8 +11,8 @@
     conference  the name and subtitle exactly as Barrington, no "B", in its own colour ("color", a hex code) at
                 the same opacity. Behind them, "Conference" in Yellowtail in a darker shade of that colour, part of the
                 box: uncovered as the box extends, covered as it closes, drifting slowly left while it's up
-    christmas   like Barrington without the "B", in red (#B32929) fading from deeper at the top to lighter and more
-                see-through at the bottom, with small snowflakes falling inside; a sprig with a star sits on the box's
+    christmas   like Barrington without the "B", in red (#B32929) easing from deeper at the top to a lighter rose
+                at the bottom, with small snowflakes falling inside; a sprig with a star sits on the box's
                 left edge and fades in from the right after the box opens, before the name
     sundayschool  like Barrington without the "B", in solid blue (#449DD1) with three big darker circles (#2B6689)
                 bouncing around inside the box and off each other
@@ -57,8 +57,9 @@
     --height: 8.2vw;                   /* about 157px, the same height as the hymn box */
     --min-width: 33.8vw;               /* about 650px; longer names make it longer */
     --open-time: 600ms;
-    /* Christmas: #B32929, deepest at the top (a little more than c2) and lighter and more see-through at the bottom */
-    --christmas: linear-gradient(180deg, rgba(179, 41, 41, 0.8) 0%, rgba(184, 50, 50, 0.66) 50%, rgba(196, 72, 72, 0.46) 100%);
+    /* Christmas: #B32929 at c2 at the top, easing to a light rose (#D0787A) at the bottom, as in the reference image.
+       The bottom stays about as solid as the top, so it looks the same over a light wall or a dark suit. */
+    --christmas: linear-gradient(180deg, rgba(179, 41, 41, 0.76) 0%, rgba(208, 120, 122, 0.82) 100%);
     --sundayschool: #449dd1;          /* solid, no see-through */
     --circle: #2b6689;                 /* Sunday School: the bouncing circles */
     --deco-time: 450ms;                /* Christmas: the sprig fading in */
