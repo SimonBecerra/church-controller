@@ -104,6 +104,12 @@
   let step = 0;          // a newer command cancels an older sequence still running
   let current = "";      // which hymn or passage is on screen ("" = nothing)
 
+  /* A hymn's lines. obs-websocket passes only objects through in a list, so a list of plain text arrives empty;
+     the controller also sends the lines as lineList / allLineList: [{t:"…"}]. Plain text still works here
+     (the ?demo preview, or a custom design). */
+  const textOf = x => typeof x === "string" ? x : (x && (x.t ?? x.text)) || "";
+  const linesOf = s => (Array.isArray(s.lineList) && s.lineList.length ? s.lineList : s.lines || []).map(textOf);
+  const allLinesOf = s => (Array.isArray(s.allLineList) && s.allLineList.length ? s.allLineList : s.allLines || []).map(textOf);
   const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
   // What counts as the same thing on screen (its next part cross-fades; anything else closes and reopens).
   // Verses sharing a "group" (one chapter in one translation) are one passage.
@@ -121,7 +127,7 @@
     words.textContent = "";
     words.classList.toggle("verse", s.kind !== "hymn");
     words.style.fontSize = s.kind === "hymn" && hymnFont ? hymnFont + "px" : "";
-    if (s.kind === "hymn") (s.lines || []).forEach(l => words.appendChild(el("span", "line", l)));
+    if (s.kind === "hymn") linesOf(s).forEach(l => words.appendChild(el("span", "line", l)));
     else {
       // The reference above ("Genesis 2:19"); the words below without verse numbers. The KJV needs no credit;
       // the other translations' terms ask for their abbreviation with the quotation, so it follows the reference.
@@ -146,7 +152,7 @@
   function hymnLayout(s) {
     words.style.fontSize = "";
     const base = parseFloat(getComputedStyle(words).fontSize);
-    const lines = (Array.isArray(s.allLines) && s.allLines.length ? s.allLines : s.lines) || [];
+    const all = allLinesOf(s), lines = all.length ? all : linesOf(s);
     const m = el("div", "words");
     m.style.cssText = "position:absolute;left:0;top:0;width:max-content;display:block;visibility:hidden;pointer-events:none;font-size:" + base + "px";
     lines.forEach(l => m.appendChild(el("span", "line", l)));
@@ -157,7 +163,7 @@
     const wide = vw("--wide"), widest = vw("--widest");
     if (need <= widest) { hymnW = Math.max(wide, need); hymnFont = base; }
     else { hymnW = widest; hymnFont = base * (widest - 2) / need; }
-    const rows = Math.max(1, +s.rows || (s.lines || []).length || 2);
+    const rows = Math.max(1, +s.rows || linesOf(s).length || 2);
     hymnH = Math.max(vw("--height"), Math.ceil(rows * hymnFont * 1.32 + padY));
   }
   const openWidth = () => (latest && latest.kind === "hymn" && hymnW ? hymnW : vw("--wide")) + "px";
