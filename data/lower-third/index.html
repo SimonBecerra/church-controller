@@ -604,13 +604,15 @@
     words.classList.add("on");
   }
 
-  // The reverse: the words fade out, (the sprig fades out,) the box shrinks back, then disappears
+  // The reverse: the words fade out, then the box shrinks back (Christmas: the sprig fades away while it does),
+  // then disappears
   async function hideSteps(mine) {
     words.classList.remove("on");
     await wait(360); if (mine !== step) return;
     if (deco.classList.contains("on")) {
+      deco.style.transitionDuration = OPEN() + "ms";   // as long as the box takes to shrink
       deco.classList.remove("on");
-      await wait(DECO()); if (mine !== step) return;
+      setTimeout(() => { deco.style.transitionDuration = ""; }, OPEN() + 50);
     }
     box.style.width = css("--height");
     await wait(OPEN()); if (mine !== step) return;
