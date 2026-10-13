@@ -7,6 +7,8 @@
   slide.kind = "hymn":  book, logo (data: URL), number, title, label, lines[], page, pages
                         intro: true = just the logo and number, held until the next slide
   slide.kind = "verse": reference, translation, text, verses[{n, text}], page, pages
+  either kind: boxColor ("#B32929") and boxOpacity (0–1): the box's colour, which the controller sets to match
+                the lower third's theme. Left out: #132932 at 76%.
 
   Hymns: the hymn book's logo and number appear in a small box (and hold there for an intro slide);
   the next slide widens the box and the words replace them, a few lines at a time. Going back to the
@@ -22,6 +24,7 @@
   To use your own design, make any .html page that listens for that event and pick it under
   "Custom design" in the source's settings in OBS. Nothing needs rebuilding.
   Preview in an ordinary browser: open this file and add ?demo to the address (?demo=hymn, ?demo=verse).
+  Add &box=%23449DD1&opacity=1 to see it in another colour.
 -->
 <html lang="en">
 <head>
@@ -233,7 +236,16 @@
     phase = "intro";
   }
 
+  // The box takes the lower third theme's colour; only the colour changes, never the fonts or sizes
+  function paint(s) {
+    const m = String(s.boxColor || "").match(/^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i);
+    const o = typeof s.boxOpacity === "number" && s.boxOpacity >= 0 && s.boxOpacity <= 1 ? s.boxOpacity : 0.76;
+    document.documentElement.style.setProperty("--box",
+      m ? `rgba(${parseInt(m[1], 16)}, ${parseInt(m[2], 16)}, ${parseInt(m[3], 16)}, ${o})` : "");
+  }
+
   async function show(s) {
+    paint(s);
     const item = itemOf(s);
     if (current === item && box.classList.contains("in")) {
       latest = s;
@@ -357,7 +369,8 @@
         verses: [{ n: 16, text: "For God so loved the world, that he gave his only begotten Son, that whosoever believeth in him should not perish, but have everlasting life." }] }
     ];
     const only = q.get("demo");
-    const list = only === "verse" ? [slides[3]] : only === "hymn" ? slides.slice(0, 3) : slides;
+    const tint = q.has("box") ? { boxColor: q.get("box"), boxOpacity: q.has("opacity") ? parseFloat(q.get("opacity")) : undefined } : {};
+    const list = (only === "verse" ? [slides[3]] : only === "hymn" ? slides.slice(0, 3) : slides).map(x => ({ ...x, ...tint }));
     let i = 0;
     const next = () => { show(list[i++ % list.length]); setTimeout(next, i === 1 ? 6000 : 4000); };
     document.fonts.ready.then(() => setTimeout(next, 200));
