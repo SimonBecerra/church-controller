@@ -46,7 +46,8 @@
     --height: 8.2vw;                   /* about 157px on a 1080p canvas */
     --lyric-size: 2.15vw;              /* about 41px; long lines shrink to fit */
     --number-size: 3.9vw;              /* about 75px */
-    --logo-height: 3.9vw;
+    --logo-width: 10.8vw;              /* the hymn book logo, shown at 10 × 5.12 (about 207 × 106 on a 1080p canvas) */
+    --intro-width: 29vw;               /* the logo-and-number box before the words come in (about 557px) */
     --intro-hold: 1400ms;              /* how long the logo and number show before the box opens */
     --open-time: 650ms;
   }
@@ -68,11 +69,14 @@
   .layer { grid-area: 1 / 1; transition: opacity 320ms ease; }
   .layer.off { opacity: 0; }
 
-  .intro { display: flex; align-items: center; gap: 1.6vw; padding: 1.4vw 2.2vw; white-space: nowrap; }
-  .intro img { height: var(--logo-height); width: auto; max-width: 14vw; object-fit: contain; display: block; }
-  .intro .book { font-family: var(--font); font-weight: 500; font-size: 1.15vw; letter-spacing: .08em; text-transform: uppercase; color: var(--text); max-width: 14vw; white-space: normal; text-align: center; line-height: 1.15; }
+  /* The hymn book's logo and the number, before the words: about 29% of the screen wide, the logo in a
+     10 × 5.12 space on the left, a thin line, and the number centred on the right */
+  .intro { display: grid; grid-template-columns: var(--logo-width) auto minmax(0, 1fr); align-items: center; column-gap: 2.6vw;
+           min-width: var(--intro-width); box-sizing: border-box; padding: 1.3vw 2.4vw 1.3vw 3.3vw; white-space: nowrap; }
+  .intro img { width: var(--logo-width); height: calc(var(--logo-width) * 0.512); object-fit: contain; display: block; }
+  .intro .book { width: var(--logo-width); font-family: var(--font); font-weight: 500; font-size: 1.15vw; letter-spacing: .08em; text-transform: uppercase; color: var(--text); white-space: normal; text-align: center; line-height: 1.15; }
   .intro .divider { width: 0.07vw; min-width: 1px; align-self: stretch; background: var(--rule); margin: 0.2vw 0; }
-  .intro .num { font-family: var(--font); font-weight: 500; font-size: var(--number-size); color: var(--text); line-height: 1; letter-spacing: -0.01em; }
+  .intro .num { justify-self: center; font-family: var(--font); font-weight: 500; font-size: var(--number-size); color: var(--text); line-height: 1; letter-spacing: -0.01em; }
 
   .words {
     width: 100%; box-sizing: border-box; padding: 1.2vw 3vw;
