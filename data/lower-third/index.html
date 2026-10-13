@@ -58,6 +58,7 @@
     --height: 8.2vw;                   /* about 157px, the same height as the hymn box */
     --min-width: 33.8vw;               /* about 650px; longer names make it longer */
     --open-time: 600ms;
+    --sub-lag: 150ms;                  /* the subtitle fades in this long after the name */
     /* Christmas: #B32929 at c2 at the top, easing to a light rose (#D0787A) at the bottom, as in the reference image.
        The bottom stays about as solid as the top, so it looks the same over a light wall or a dark suit. */
     --christmas: linear-gradient(180deg, rgba(179, 41, 41, 0.76) 0%, rgba(208, 120, 122, 0.82) 100%);
@@ -121,6 +122,9 @@
     opacity: 0; transition: opacity 360ms ease;
   }
   .words.on { opacity: 1; }
+  /* The subtitle follows the name a moment later (--sub-lag), in every theme; going away, they leave together */
+  .words .subtitle { opacity: 0; transition: opacity 360ms ease; }
+  .words.on .subtitle { opacity: 1; transition-delay: var(--sub-lag); }
   .name { font-family: var(--font); font-weight: 500; font-size: var(--name-size); color: var(--text); line-height: 1.15; }
   /* Barrington: a visiting speaker's subtitle under the name, small capitals in Montserrat Medium */
   .subtitle { display: block; font-family: var(--font); font-weight: 500; font-size: var(--sub-size); color: var(--text); text-transform: uppercase; letter-spacing: 0.03em; line-height: 1.2; }
@@ -137,7 +141,7 @@
      where the text did (font-size --script-size, line-height 1, top --script-top). */
   .script {
     position: absolute; display: none;
-    left: calc(1.1vw - var(--script-size) * 0.0293);
+    left: calc(0.3vw - var(--script-size) * 0.0293);
     top: calc(var(--script-top) - var(--script-size) * 0.166);
     height: calc(var(--script-size) * 1.3315); width: calc(var(--script-size) * 4.0151);
     pointer-events: none; transform: translateX(0);
@@ -589,11 +593,11 @@
     box.classList.add("up");
     if (theme === "sundayschool") startDots(); else stopDots();
     if (theme === "christmas") startSnow(); else stopSnow();
-    if (theme === "conference") { void script.offsetWidth; script.classList.add("drift"); }
+    // Conference: "Conference" starts being written as soon as the box appears, and starts drifting
+    if (theme === "conference") { void script.offsetWidth; script.classList.add("drift", "write"); }
     await wait(300); if (mine !== step) return;
-    // 2. it extends (Conference: and "Conference" starts being written)
+    // 2. it extends
     box.style.width = w + "px";
-    if (theme === "conference") script.classList.add("write");
     await wait(OPEN()); if (mine !== step) return;
     // 3. Christmas: the sprig fades in, sliding in from a little to the right
     if (theme === "christmas") {
