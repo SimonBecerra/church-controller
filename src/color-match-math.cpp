@@ -2,7 +2,7 @@
  * Color matching maths. See color-match-math.h for what goes in and comes out.
  *
  * How the correction is worked out
- *   1. Check both pictures are real: not black, not a frozen "no signal" screen.
+ *   1. Check both pictures are real: not black, not a flat "no signal" screen. (A still picture is fine.)
  *   2. White balance, tint and RGB balance: find each camera's near-neutral areas (walls, ceiling, white
  *      shirts, grey carpet) by repeatedly balancing the picture and keeping the pixels that come out nearly
  *      grey. The ratio between the two cameras' neutrals gives one gain per channel. Medians are used
@@ -478,11 +478,17 @@ Result colorMatch(const std::vector<Frame> &reference, const std::vector<Frame> 
 			res.message = "The picture from " + name + " is black. Check that the camera is on.";
 			return false;
 		}
-		if (s.motion < 0.3f) {
+		// A live camera on a still room can send exactly the same picture again and again (compressed or
+		// noise-reduced video repeats unchanged areas), so stillness alone never stops a match. Only a still
+		// picture that is also almost one flat colour is treated as a "no signal" screen. Anything else that
+		// isn't really the room (a frozen frame, colour bars) won't look like the reference, so the
+		// confidence check declines it.
+		if (s.motion < 0.3f && s.stddev < 8.0f) {
 			res.code = "FROZEN";
-			res.message = "The picture from " + name +
-				      " isn't moving: the camera may be asleep, or the capture card is showing its "
-				      "\"no signal\" screen.";
+			res.message =
+				"The picture from " + name +
+				" is one flat colour and isn't changing: the camera may be asleep, or the capture "
+				"card is showing its \"no signal\" screen.";
 			return false;
 		}
 		return true;
