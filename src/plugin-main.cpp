@@ -13,7 +13,7 @@
  *                          or select an existing broadcast and start it.
  *
  * It also adds two sources with their own commands: "Lower Third" (lower-third.cpp) and
- * "Scripture & Hymns" (text-display.cpp).
+ * "Scripture & Hymns" (text-display.cpp), and the "Color Match" filter with its dock (color-match.cpp).
  *
  * It can also open the BGH LIVE Controller when OBS starts, if that's turned on in the controller's Settings.
  *
@@ -68,6 +68,7 @@
 #endif
 
 #include "obs-websocket-api.h"
+#include "color-match.h"
 #include "sources.h"
 
 OBS_DECLARE_MODULE()
@@ -558,6 +559,7 @@ bool obs_module_load(void)
 {
 	lower_third_load();
 	text_display_load();
+	color_match_load();
 	LOG(LOG_INFO, "loaded");
 	return true;
 }
@@ -572,6 +574,7 @@ static void onFrontendEvent(enum obs_frontend_event event, void *)
 void obs_module_post_load(void)
 {
 	obs_frontend_add_event_callback(onFrontendEvent, nullptr);
+	color_match_dock_load();
 	vendor = obs_websocket_register_vendor("church-controller");
 	if (!vendor) {
 		LOG(LOG_WARNING, "obs-websocket isn't available; the controller's Go Live features won't work.");
@@ -584,11 +587,13 @@ void obs_module_post_load(void)
 	obs_websocket_vendor_register_request(vendor, "StartYouTubeBroadcast", reqStartBroadcast, nullptr);
 	lower_third_register_requests(vendor);
 	text_display_register_requests(vendor);
+	color_match_register_requests(vendor);
 	LOG(LOG_INFO, "commands registered with obs-websocket");
 }
 
 void obs_module_unload(void)
 {
 	obs_frontend_remove_event_callback(onFrontendEvent, nullptr);
+	color_match_unload();
 	LOG(LOG_INFO, "unloaded");
 }
