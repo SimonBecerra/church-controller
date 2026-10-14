@@ -44,6 +44,7 @@ target_sources(
     src/color-match.cpp
     src/color-match-math.cpp
     src/color-match-dock.cpp
+    src/audio-level.cpp
 )
 
 set_target_properties_plugin(${CMAKE_PROJECT_NAME} PROPERTIES OUTPUT_NAME ${_name})
