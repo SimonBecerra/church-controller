@@ -553,6 +553,99 @@ static void openControllerIfWanted()
 #endif
 }
 
+/* ------------------------------------------------------------------ start the stream on the title slide */
+
+/*
+ * The controller saves %APPDATA%\BGH LIVE Controller\start-title.json:
+ *   { "enabled": true, "scenes": { "Sunday Service": "Title Slide", ... } }   (title slide per scene collection)
+ * When enabled, starting the stream (from OBS or the controller) first puts that collection's title slide on
+ * Program with a cut, in the moment before the stream starts, so viewers never see what was there before.
+ * A collection that isn't listed uses a scene called "Title Slide", if it has one.
+ */
+static obs_data_t *readControllerFile(const char *name)
+{
+#ifdef _WIN32
+	PWSTR appdata = nullptr;
+	if (SHGetKnownFolderPath(FOLDERID_RoamingAppData, 0, nullptr, &appdata) != S_OK)
+		return nullptr;
+	char *appdataUtf8 = nullptr;
+	os_wcs_to_utf8_ptr(appdata, 0, &appdataUtf8);
+	CoTaskMemFree(appdata);
+	if (!appdataUtf8)
+		return nullptr;
+	const QString file = QString::fromUtf8(appdataUtf8) + "\\BGH LIVE Controller\\" + QString::fromUtf8(name);
+	bfree(appdataUtf8);
+	return obs_data_create_from_json_file(file.toUtf8().constData());
+#else
+	(void)name;
+	return nullptr;
+#endif
+}
+
+static obs_source_t *titleSlideFor(const char *collection)
+{
+	obs_data_t *cfg = readControllerFile("start-title.json");
+	if (!cfg)
+		return nullptr;
+	obs_source_t *found = nullptr;
+	if (obs_data_get_bool(cfg, "enabled")) {
+		obs_data_t *scenes = obs_data_get_obj(cfg, "scenes");
+		const char *want = scenes && collection ? obs_data_get_string(scenes, collection) : "";
+		obs_data_release(scenes);
+		if (want && *want) {
+			found = obs_get_source_by_name(want);
+		} else {
+			// Not listed: a scene called "Title Slide" (any capitals)
+			obs_frontend_source_list list = {};
+			obs_frontend_get_scenes(&list);
+			for (size_t i = 0; i < list.sources.num && !found; ++i) {
+				const QString n =
+					QString::fromUtf8(obs_source_get_name(list.sources.array[i])).trimmed();
+				if (n.compare("Title Slide", Qt::CaseInsensitive) == 0)
+					found = obs_source_get_ref(list.sources.array[i]);
+			}
+			obs_frontend_source_list_free(&list);
+		}
+		if (found && !obs_source_is_scene(found)) {
+			obs_source_release(found);
+			found = nullptr;
+		}
+	}
+	obs_data_release(cfg);
+	return found;
+}
+
+static void titleBeforeStreaming()
+{
+	char *collection = obs_frontend_get_current_scene_collection();
+	obs_source_t *title = titleSlideFor(collection);
+	bfree(collection);
+	if (!title)
+		return;
+	obs_source_t *now = obs_frontend_get_current_scene();
+	if (now != title) {
+		// A cut, so the stream's first picture is the title slide and not the middle of a fade
+		obs_source_t *was = obs_frontend_get_current_transition();
+		obs_source_t *cut = nullptr;
+		obs_frontend_source_list list = {};
+		obs_frontend_get_transitions(&list);
+		for (size_t i = 0; i < list.sources.num && !cut; ++i)
+			if (strcmp(obs_source_get_unversioned_id(list.sources.array[i]), "cut_transition") == 0)
+				cut = obs_source_get_ref(list.sources.array[i]);
+		obs_frontend_source_list_free(&list);
+		if (cut && cut != was)
+			obs_frontend_set_current_transition(cut);
+		obs_frontend_set_current_scene(title);
+		if (cut && was && cut != was)
+			obs_frontend_set_current_transition(was);
+		obs_source_release(cut);
+		obs_source_release(was);
+		LOG(LOG_INFO, "stream starting: switched to %s first", obs_source_get_name(title));
+	}
+	obs_source_release(now);
+	obs_source_release(title);
+}
+
 /* ------------------------------------------------------------------ module */
 
 bool obs_module_load(void)
@@ -569,6 +662,8 @@ static void onFrontendEvent(enum obs_frontend_event event, void *)
 {
 	if (event == OBS_FRONTEND_EVENT_FINISHED_LOADING)
 		openControllerIfWanted();
+	else if (event == OBS_FRONTEND_EVENT_STREAMING_STARTING)
+		titleBeforeStreaming();
 }
 
 void obs_module_post_load(void)
