@@ -58,8 +58,8 @@ public:
 		mode = new QComboBox(this);
 		mode->addItem("One-time match", "once");
 		mode->addItem("Continuous", "continuous");
-		reference->setToolTip("The camera whose colours are kept. It's never changed.");
-		target->setToolTip("The camera whose colours are adjusted to match the reference.");
+		reference->setToolTip("The camera whose colors are kept. It's never changed.");
+		target->setToolTip("The camera whose colors are adjusted to match the reference.");
 		mode->setToolTip("One-time: match when you press Match Colors.\n"
 				 "Continuous: keep matching every few seconds, easing gently into lighting changes.");
 		form->addRow("Reference", reference);

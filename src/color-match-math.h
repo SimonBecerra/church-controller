@@ -1,7 +1,7 @@
 #pragma once
 
 /*
- * Colour matching maths for the Color Match filter (color-match.cpp). Plain C++ with no OBS calls, so it can
+ * Color matching maths for the Color Match filter (color-match.cpp). Plain C++ with no OBS calls, so it can
  * be tested on its own.
  *
  * Input: a few small pictures from each camera, as 8-bit RGBA in the usual (gamma-encoded) sRGB that OBS

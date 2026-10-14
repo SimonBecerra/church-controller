@@ -1,20 +1,20 @@
 /*
- * Colour matching maths. See color-match-math.h for what goes in and comes out.
+ * Color matching maths. See color-match-math.h for what goes in and comes out.
  *
  * How the correction is worked out
  *   1. Check both pictures are real: not black, not a frozen "no signal" screen.
  *   2. White balance, tint and RGB balance: find each camera's near-neutral areas (walls, ceiling, white
  *      shirts, grey carpet) by repeatedly balancing the picture and keeping the pixels that come out nearly
  *      grey. The ratio between the two cameras' neutrals gives one gain per channel. Medians are used
- *      throughout, so a coloured banner or a red curtain on one side doesn't drag the result.
- *   3. Skin tones, only when both pictures show enough skin-coloured area: nudge the gains a little so skin
+ *      throughout, so a colored banner or a red curtain on one side doesn't drag the result.
+ *   3. Skin tones, only when both pictures show enough skin-colored area: nudge the gains a little so skin
  *      agrees too, and only when the two already roughly agree.
  *   4. Tone: compare the brightness distributions percentile by percentile, fit a smooth curve
  *      (offset + gain * x^gamma, which covers exposure, contrast, gamma, shadows and highlights), then let it
  *      follow the measured shape a little (half the difference, at most 3%). Clipped and crushed areas
  *      are kept out of the fit.
- *   5. Saturation: compare how colourful the two pictures are after steps 2-4.
- *   6. Confidence: lowered for little to judge colour by, very different scene content, measurements that
+ *   5. Saturation: compare how colorful the two pictures are after steps 2-4.
+ *   6. Confidence: lowered for little to judge color by, very different scene content, measurements that
  *      disagree from frame to frame, or an implausibly large correction.
  *
  * Every adjustment is limited (gains 0.6-1.6, saturation 0.7-1.4, curve offset and slope), so even a wrong
@@ -107,7 +107,7 @@ std::vector<Px> pool(const std::vector<Frame> &frames, size_t maxCount)
 	return out;
 }
 
-// A clipped or crushed pixel says nothing reliable about colour
+// A clipped or crushed pixel says nothing reliable about color
 bool usable(const Px &p)
 {
 	const float mx = std::max({p.g[0], p.g[1], p.g[2]});
@@ -174,7 +174,7 @@ PictureStats pictureStats(const std::vector<Frame> &frames)
 /* ------------------------------------------------------------------ white balance */
 
 struct Cast {
-	float rg = 1, bg = 1; // the camera's neutral colour: red/green and blue/green, linear
+	float rg = 1, bg = 1; // the camera's neutral color: red/green and blue/green, linear
 	float fraction = 0;   // share of usable pixels that came out neutral
 	bool fromNeutrals = false;
 };
@@ -186,7 +186,7 @@ Cast estimateCast(const std::vector<Px> &px)
 	rg.reserve(px.size());
 	bg.reserve(px.size());
 	size_t usableCount = 0;
-	// Start from the median colour of the midtones ("grey world"), then keep what comes out nearly grey
+	// Start from the median color of the midtones ("grey world"), then keep what comes out nearly grey
 	for (const Px &p : px) {
 		if (!usable(p))
 			continue;
@@ -270,7 +270,7 @@ void oklab(const float l[3], float &L, float &a, float &b)
 	b = 0.0259040371f * lm + 0.7827717662f * mm - 0.8086757660f * sm;
 }
 
-// Colour and brightness histograms, for "do the two cameras see similar things?"
+// Color and brightness histograms, for "do the two cameras see similar things?"
 struct Hist {
 	static constexpr int AB = 12, LB = 16;
 	std::vector<double> ab = std::vector<double>(AB * AB + 1, 0.0);
@@ -657,10 +657,9 @@ Result colorMatch(const std::vector<Frame> &reference, const std::vector<Frame> 
 	if (std::min(rUsable, tUsable) < 0.4f)
 		reasons.push_back({20, "much of the picture is blown out or too dark"});
 	if (neutral < 0.01f)
-		reasons.push_back({25, "there's very little white, grey or black in the pictures to judge colour by"});
+		reasons.push_back({25, "there's very little white, gray or black in the pictures to judge color by"});
 	else if (neutral < 0.03f)
-		reasons.push_back(
-			{12, "there's only a little white, grey or black in the pictures to judge colour by"});
+		reasons.push_back({12, "there's only a little white, gray or black in the pictures to judge color by"});
 	if (similarity < 0.2f)
 		reasons.push_back({50, "the two cameras see very different things"});
 	else if (similarity < 0.35f)
@@ -672,7 +671,7 @@ Result colorMatch(const std::vector<Frame> &reference, const std::vector<Frame> 
 	else if (spread > 0.03f)
 		reasons.push_back({8, "the picture changed a little while it was measured"});
 	if (gainLimited || std::max(std::abs(std::log(P.gain[0])), std::abs(std::log(P.gain[2]))) > 0.35f)
-		reasons.push_back({15, "the colour difference is unusually large"});
+		reasons.push_back({15, "the color difference is unusually large"});
 	if (tone.limited)
 		reasons.push_back({10, "the brightness difference is unusually large"});
 	if (skin < 0)
@@ -704,7 +703,7 @@ Result colorMatch(const std::vector<Frame> &reference, const std::vector<Frame> 
 		res.code = "LOW_CONFIDENCE";
 		res.message = fmt("Not confident enough (%.0f): ", res.confidence) +
 			      (worst ? worst->text : "the measurement wasn't reliable") +
-			      ". The colours weren't changed.";
+			      ". The colors weren't changed.";
 	}
 	return res;
 }

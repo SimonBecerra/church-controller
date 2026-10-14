@@ -2,7 +2,7 @@
  * Color Match filter for the Church Controller plug-in (written against OBS 32.2.2)
  *
  * Adds a video filter called "Color Match" (right-click a source > Filters > + > Color Match). It goes on the
- * target camera only, and makes that camera's colours resemble a reference camera's: white balance, tint,
+ * target camera only, and makes that camera's colors resemble a reference camera's: white balance, tint,
  * exposure, contrast, gamma, saturation, RGB balance, shadows, midtones and highlights (and skin tones when
  * there's enough skin to measure). The reference camera is never touched, and neither are the target
  * camera's own settings: everything lives in this filter, so turning it off or deleting it undoes it all.
@@ -29,7 +29,7 @@
  * Safety
  *   The reference must be another input (not a scene, so it can't contain the target), and can't itself
  *   have a Color Match filter (two cameras matched to each other would chase each other).
- *   A missing, black, frozen or unavailable camera is reported and the current colours are kept.
+ *   A missing, black, frozen or unavailable camera is reported and the current colors are kept.
  *
  * Controller commands (obs-websocket vendor "church-controller")
  *   GetColorMatchStatus {}                                   -> { sources[{name, camera}], defaultReference,
@@ -753,7 +753,7 @@ static obs_properties_t *cm_properties(void *data)
 	obs_properties_add_text(props, "status_info", st.message.empty() ? "Not matched yet." : st.message.c_str(),
 				OBS_TEXT_INFO);
 
-	obs_property_t *ref = obs_properties_add_list(props, "reference", "Reference camera (colours kept)",
+	obs_property_t *ref = obs_properties_add_list(props, "reference", "Reference camera (colors kept)",
 						      OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_STRING);
 	obs_property_list_add_string(ref, "Choose a camera", "");
 	obs_source_t *parent = f ? obs_filter_get_parent(f->context) : nullptr;
@@ -762,8 +762,7 @@ static obs_properties_t *cm_properties(void *data)
 			continue;
 		obs_property_list_add_string(ref, s.name.c_str(), s.name.c_str());
 	}
-	obs_property_set_long_description(ref,
-					  "The camera whose colours this camera should match. It's never changed.");
+	obs_property_set_long_description(ref, "The camera whose colors this camera should match. It's never changed.");
 
 	obs_property_t *mode =
 		obs_properties_add_list(props, "mode", "Matching mode", OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_STRING);
@@ -901,7 +900,7 @@ std::string checkReference(obs_source_t *filter, const std::string &reference, s
 		code = "FEEDBACK";
 		message =
 			"\"" + reference +
-			"\" is itself being colour matched, so it can't be the reference (the two would chase each other).";
+			"\" is itself being color matched, so it can't be the reference (the two would chase each other).";
 	}
 	obs_source_release(ref);
 	return code;
@@ -954,7 +953,7 @@ void reset(obs_source_t *filter)
 		f->sh->fading = true;
 		f->sh->paramsRev++;
 		f->sh->state = "none";
-		f->sh->message = "Reset: showing the camera's own colours.";
+		f->sh->message = "Reset: showing the camera's own colors.";
 		f->sh->confidence = 0;
 		f->sh->matchedAt = 0;
 		// Continuous mode would match again straight away; reset means "stop", so switch to one-time
@@ -1079,7 +1078,7 @@ static void reqMatch(obs_data_t *request, obs_data_t *response, void *)
 	if (!filter) {
 		obs_data_set_bool(response, "accepted", false);
 		setCode(response, false, target ? "NO_MATCH" : "NO_TARGET",
-			"Set up colour matching for that camera first.");
+			"Set up color matching for that camera first.");
 		return;
 	}
 	const std::string id = colormatch::requestMatch(filter);
@@ -1095,7 +1094,7 @@ static void reqReset(obs_data_t *request, obs_data_t *response, void *)
 	obs_source_t *filter = colormatch::findFilter(target);
 	obs_source_release(target);
 	if (!filter)
-		return setCode(response, false, "NO_MATCH", "That camera has no colour matching.");
+		return setCode(response, false, "NO_MATCH", "That camera has no color matching.");
 	colormatch::reset(filter);
 	setCode(response, true, "OK");
 	fillStatus(filterOf(filter), response);

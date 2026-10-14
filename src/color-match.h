@@ -24,7 +24,7 @@ namespace colormatch {
 
 struct Status {
 	std::string target;      // the source being corrected
-	std::string reference;   // the source whose colours are kept
+	std::string reference;   // the source whose colors are kept
 	std::string mode;        // "once" or "continuous"
 	std::string state;       // none, matching, matched, declined, error
 	std::string message;     // plain words for the operator
@@ -62,7 +62,7 @@ void setOptions(obs_source_t *filter, const std::string &reference, const std::s
 // Measure both cameras and apply the result if it's reliable. Returns a job id; the outcome arrives as a
 // ColorMatchResult event with the same id (and in status()).
 std::string requestMatch(obs_source_t *filter);
-// Go back to the camera's own colours (fades out over half a second)
+// Go back to the camera's own colors (fades out over half a second)
 void reset(obs_source_t *filter);
 
 } // namespace colormatch
