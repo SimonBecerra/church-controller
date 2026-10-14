@@ -588,6 +588,7 @@ void obs_module_post_load(void)
 	lower_third_register_requests(vendor);
 	text_display_register_requests(vendor);
 	color_match_register_requests(vendor);
+	audio_level_register_requests(vendor);
 	LOG(LOG_INFO, "commands registered with obs-websocket");
 }
 
@@ -595,5 +596,6 @@ void obs_module_unload(void)
 {
 	obs_frontend_remove_event_callback(onFrontendEvent, nullptr);
 	color_match_unload();
+	audio_level_unload();
 	LOG(LOG_INFO, "unloaded");
 }
