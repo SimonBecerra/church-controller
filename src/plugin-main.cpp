@@ -652,6 +652,7 @@ bool obs_module_load(void)
 {
 	lower_third_load();
 	text_display_load();
+	frame_probe_load();
 	color_match_load();
 	LOG(LOG_INFO, "loaded");
 	return true;
@@ -664,6 +665,8 @@ static void onFrontendEvent(enum obs_frontend_event event, void *)
 		openControllerIfWanted();
 	else if (event == OBS_FRONTEND_EVENT_STREAMING_STARTING)
 		titleBeforeStreaming();
+	else if (event == OBS_FRONTEND_EVENT_SCENE_COLLECTION_CHANGING || event == OBS_FRONTEND_EVENT_EXIT)
+		frame_probe_unload(); // the feed check's filter is never saved in a scene collection
 }
 
 void obs_module_post_load(void)
@@ -684,6 +687,8 @@ void obs_module_post_load(void)
 	text_display_register_requests(vendor);
 	color_match_register_requests(vendor);
 	audio_level_register_requests(vendor);
+	frame_probe_register_requests(vendor);
+	frame_probe_start_ticks();
 	LOG(LOG_INFO, "commands registered with obs-websocket");
 }
 
@@ -692,5 +697,7 @@ void obs_module_unload(void)
 	obs_frontend_remove_event_callback(onFrontendEvent, nullptr);
 	color_match_unload();
 	audio_level_unload();
+	frame_probe_stop_ticks();
+	frame_probe_unload();
 	LOG(LOG_INFO, "unloaded");
 }
