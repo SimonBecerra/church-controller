@@ -81,6 +81,7 @@ struct LowerThird {
 	std::string subtitle; // shown under the name in the Conference theme
 	std::string theme = "barrington";
 	std::string color = "#132932"; // Conference box colour
+	int opacity = 90;              // the box's see-through level, 50-100 % (Sunday School stays solid)
 	double shownFor = 0.0;
 	double duration = 8.0;
 	bool fromTextSource = true;
@@ -195,10 +196,12 @@ static void sendToPage(LowerThird *lt, const char *action, const std::string &na
 		       const std::string &subtitle = std::string())
 {
 	std::string theme, color;
+	int opacity;
 	{
 		std::lock_guard<std::mutex> g(lt->lock);
 		theme = lt->theme;
 		color = lt->color;
+		opacity = lt->opacity;
 	}
 	obs_data_t *d = obs_data_create();
 	obs_data_set_string(d, "action", action);
@@ -206,6 +209,7 @@ static void sendToPage(LowerThird *lt, const char *action, const std::string &na
 	obs_data_set_string(d, "subtitle", subtitle.c_str());
 	obs_data_set_string(d, "theme", theme.c_str());
 	obs_data_set_string(d, "color", color.c_str());
+	obs_data_set_int(d, "opacity", opacity);
 	lt->page.send(LT_EVENT, d);
 	obs_data_release(d);
 }
@@ -228,6 +232,7 @@ static void fillState(LowerThird *lt, obs_data_t *d)
 	obs_data_set_string(d, "subtitle", lt->subtitle.c_str());
 	obs_data_set_string(d, "theme", lt->theme.c_str());
 	obs_data_set_string(d, "color", lt->color.c_str());
+	obs_data_set_int(d, "opacity", lt->opacity);
 	obs_data_set_int(d, "duration", (long long)lt->duration);
 }
 
@@ -306,6 +311,7 @@ static void lt_defaults(obs_data_t *settings)
 	obs_data_set_default_bool(settings, "enabled", true);
 	obs_data_set_default_string(settings, "theme", "barrington");
 	obs_data_set_default_string(settings, "color", "#132932");
+	obs_data_set_default_int(settings, "opacity", 90);
 	obs_data_set_default_string(settings, "names_from", "source");
 	obs_data_set_default_string(settings, "text_source", "Speaker Names");
 	obs_data_set_default_string(settings, "typed_names", "");
@@ -318,7 +324,8 @@ static void lt_update(void *data, obs_data_t *settings)
 	auto *lt = static_cast<LowerThird *>(data);
 	const bool reloaded = lt->page.configure(obs_data_get_string(settings, "design_file"));
 
-	bool enabledChanged, turnedOff, themeChanged;
+	bool enabledChanged, turnedOff, themeChanged, opacityChanged;
+	int opacity;
 	{
 		std::lock_guard<std::mutex> g(lt->lock);
 		const bool enabled = obs_data_get_bool(settings, "enabled");
@@ -335,6 +342,9 @@ static void lt_update(void *data, obs_data_t *settings)
 		themeChanged = lt->theme != theme || (conference && lt->color != color);
 		lt->theme = theme;
 		lt->color = color;
+		opacity = std::clamp((int)obs_data_get_int(settings, "opacity"), 50, 100);
+		opacityChanged = lt->opacity != opacity;
+		lt->opacity = opacity;
 		if (reloaded)
 			lt->showing.clear(); // the page starts empty after a reload
 	}
@@ -344,7 +354,15 @@ static void lt_update(void *data, obs_data_t *settings)
 		LT_LOG(LOG_INFO, "%s", turnedOff ? "switched off" : "switched on");
 	if (themeChanged)
 		hideName(lt); // the next name shows in the new theme
-	if (refreshNames(lt) || enabledChanged || themeChanged || reloaded)
+	else if (opacityChanged) {
+		// A name on screen takes the new see-through level straight away
+		obs_data_t *d = obs_data_create();
+		obs_data_set_string(d, "action", "style");
+		obs_data_set_int(d, "opacity", opacity);
+		lt->page.send(LT_EVENT, d);
+		obs_data_release(d);
+	}
+	if (refreshNames(lt) || enabledChanged || themeChanged || opacityChanged || reloaded)
 		emitState(lt);
 }
 
@@ -523,8 +541,10 @@ static obs_properties_t *lt_properties(void *data)
 	obs_property_set_long_description(theme,
 					  "The BGH LIVE Controller sets this from Settings → Scene collections.");
 	obs_property_t *color = obs_properties_add_text(props, "color", "Conference colour (hex)", OBS_TEXT_DEFAULT);
-	obs_property_set_long_description(color,
-					  "Like #132932. Shown at the same see-through level as the Barrington theme.");
+	obs_property_set_long_description(color, "Like #132932. Shown at the see-through level below.");
+	obs_property_t *op = obs_properties_add_int_slider(props, "opacity", "See-through level (%)", 50, 100, 5);
+	obs_property_set_long_description(op, "How solid the box is (not for Sunday School, which is solid). "
+					      "The BGH LIVE Controller sets this from Settings → Scene collections.");
 
 	obs_property_t *from = obs_properties_add_list(props, "names_from", "Names come from", OBS_COMBO_TYPE_LIST,
 						       OBS_COMBO_FORMAT_STRING);
@@ -703,6 +723,8 @@ static void reqSetTheme(obs_data_t *request, obs_data_t *response, void *)
 	obs_data_set_string(change, "theme", cleanTheme(obs_data_get_string(request, "theme")).c_str());
 	if (obs_data_has_user_value(request, "color"))
 		obs_data_set_string(change, "color", cleanColor(obs_data_get_string(request, "color")).c_str());
+	if (obs_data_has_user_value(request, "opacity"))
+		obs_data_set_int(change, "opacity", std::clamp((int)obs_data_get_int(request, "opacity"), 50, 100));
 	updateLowerThirds(request, change, response);
 	obs_data_release(change);
 }

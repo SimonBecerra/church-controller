@@ -248,8 +248,11 @@
   // Christmas: the gradient and the snow.
   function paint(s) {
     const m = String(s.boxColor || "").match(/^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i);
-    const o = typeof s.boxOpacity === "number" && s.boxOpacity >= 0 && s.boxOpacity <= 1 ? s.boxOpacity : 0.76;
+    const o = typeof s.boxOpacity === "number" && s.boxOpacity >= 0 && s.boxOpacity <= 1 ? s.boxOpacity : 0.9;
     const xmas = s.boxStyle === "christmas";
+    // Christmas: the gradient at the controller's see-through level, the bottom a little stronger
+    document.documentElement.style.setProperty("--christmas",
+      `linear-gradient(180deg, rgba(179, 41, 41, ${o}) 0%, rgba(208, 120, 122, ${Math.min(1, o + 0.06)}) 100%)`);
     document.documentElement.style.setProperty("--box", xmas ? "var(--christmas)"
       : m ? `rgba(${parseInt(m[1], 16)}, ${parseInt(m[2], 16)}, ${parseInt(m[3], 16)}, ${o})` : "");
     if (xmas) snow.start(); else snow.stop();
