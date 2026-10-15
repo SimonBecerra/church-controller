@@ -73,6 +73,9 @@ jobs:
 
   macos-build:
     name: Build for macOS 🍏
+    # The church only needs Windows. Mac and Linux builds use many of GitHub's free build minutes on a private
+    # repository, so they only run when the repository variable BUILD_ALL_PLATFORMS is "true".
+    if: ${{ vars.BUILD_ALL_PLATFORMS == 'true' }}
     runs-on: macos-15
     needs: check-event
     defaults:
@@ -177,6 +180,7 @@ jobs:
 
   ubuntu-build:
     name: Build for Ubuntu 🐧
+    if: ${{ vars.BUILD_ALL_PLATFORMS == 'true' }}
     strategy:
       matrix:
         os: [ubuntu-24.04]

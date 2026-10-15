@@ -1,5 +1,8 @@
 # After every successful build of master, publish the Windows plug-in where the BGH LIVE Controller
-# looks for updates: the "plugin-latest" release of this repository.
+# looks for updates: the "plugin-latest" release of the public SimonBecerra/bgh-live-downloads repository
+# (so this repository can stay private), and of this repository too.
+# Publishing to bgh-live-downloads needs the secret RELEASES_TOKEN: a fine-grained token with
+# Contents: Read and write on bgh-live-downloads only.
 #   church-controller-windows.zip   church-controller\bin\64bit\church-controller.dll and church-controller\data\...
 #   version.txt                     which build it is (also inside the zip, as data\version.txt)
 # The controller compares version.txt with the copy installed in OBS and offers "Update now".
@@ -58,5 +61,19 @@ jobs:
             gh release create plugin-latest -R "$REPO" --target master --latest=false \
               --title "Plug-in for the BGH LIVE Controller" \
               --notes "The newest build of the plug-in. The BGH LIVE Controller downloads and installs it automatically; there's nothing to do here."
+          fi
+          gh release upload plugin-latest church-controller-windows.zip version.txt --clobber -R "$REPO"
+
+      - name: Publish to bgh-live-downloads (where the controller looks)
+        env:
+          GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+          REPO: SimonBecerra/bgh-live-downloads
+        run: |
+          set -euo pipefail
+          if [ -z "$GH_TOKEN" ]; then echo "::warning::The RELEASES_TOKEN secret isn't set, so the plug-in wasn't published to $REPO"; exit 0; fi
+          if ! gh release view plugin-latest -R "$REPO" >/dev/null 2>&1; then
+            gh release create plugin-latest -R "$REPO" --latest=false \
+              --title "Plug-in for the BGH LIVE Controller" \
+              --notes "The newest build of the OBS plug-in. The BGH LIVE Controller downloads and installs it automatically; there's nothing to do here."
           fi
           gh release upload plugin-latest church-controller-windows.zip version.txt --clobber -R "$REPO"
