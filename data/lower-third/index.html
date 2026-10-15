@@ -38,7 +38,7 @@
 
   :root {
     /* Change these to restyle without touching anything else */
-    --box-opacity: 0.76;               /* c2: the same for every theme and the hymn box */
+    --box-opacity: 0.9;                /* the see-through level set in the controller (50-100 %), every theme but Sunday School */
     --box: rgba(19, 41, 50, var(--box-opacity));   /* #132932, same as the hymn box */
     --letter: #122932;                 /* Barrington: the cropped B behind the name */
     --text: #ffffff;
@@ -62,7 +62,7 @@
     --b-time: 700ms;                   /* Barrington: the B fading in from the left */                  /* the subtitle fades in this long after the name */
     /* Christmas: #B32929 at c2 at the top, easing to a light rose (#D0787A) at the bottom, as in the reference image.
        The bottom stays about as solid as the top, so it looks the same over a light wall or a dark suit. */
-    --christmas: linear-gradient(180deg, rgba(179, 41, 41, 0.76) 0%, rgba(208, 120, 122, 0.82) 100%);
+    --christmas: linear-gradient(180deg, rgba(179, 41, 41, var(--box-opacity)) 0%, rgba(208, 120, 122, min(1, calc(var(--box-opacity) + 0.06))) 100%);
     --sundayschool: #449dd1;          /* solid, no see-through */
     --circle: #2b6689;                 /* Sunday School: the bouncing circles */
     --deco-time: 450ms;                /* Christmas: the sprig fading in */
@@ -558,6 +558,7 @@
     const subtitle = String(d.subtitle || "");   // the controller only sends one when it should show
     const key = JSON.stringify([d.name, subtitle, theme, theme === "conference" ? d.color : ""]);
     const mine = ++step;
+    setOpacity(d.opacity);
     if (current === key && box.classList.contains("up")) return;
     const up = box.classList.contains("up");
     const sameLook = up && box.dataset.theme === theme && (theme !== "conference" || box.dataset.color === String(d.color || ""));
@@ -640,10 +641,16 @@
     if (mine === step) current = "";
   }
 
+  // The see-through level, as a percentage (50-100); anything else keeps the current one
+  function setOpacity(pct) {
+    const v = Number(pct);
+    if (v >= 50 && v <= 100) document.documentElement.style.setProperty("--box-opacity", String(v / 100));
+  }
   window.addEventListener("churchLowerThird", (e) => {
     let d = e.detail || {};
     if (typeof d === "string") { try { d = JSON.parse(d); } catch { d = {}; } }
-    if (d.action === "show" && d.name) show({name:String(d.name), subtitle:d.subtitle, theme:d.theme, color:d.color});
+    if (d.action === "style") { setOpacity(d.opacity); return; }
+    if (d.action === "show" && d.name) show({name:String(d.name), subtitle:d.subtitle, theme:d.theme, color:d.color, opacity:d.opacity});
     else hide();
   });
 
