@@ -14,3 +14,9 @@ void text_display_register_requests(obs_websocket_vendor vendor);
 // The microphone's level before mute and volume, for the controller's Ready check (audio-level.cpp)
 void audio_level_register_requests(obs_websocket_vendor vendor);
 void audio_level_unload(void);
+// Whether a video feed (the projector's NDI) is actually arriving, for the controller's slideshow (frame-probe.cpp)
+void frame_probe_load(void);
+void frame_probe_register_requests(obs_websocket_vendor vendor);
+void frame_probe_start_ticks(void);
+void frame_probe_stop_ticks(void);
+void frame_probe_unload(void);
