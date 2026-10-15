@@ -13,8 +13,10 @@
  *     fps         frames per second arriving since the last ask (-1 on the first ask: counting has just started)
  *     showing     whether the feed is in a scene on Program or Preview right now (some NDI sources disconnect
  *                 while they aren't shown, so no frames then doesn't have to mean a problem)
- * The filter is only added after the controller asks, is removed when nobody has asked for 30 seconds, and is
- * taken off before the scene collection changes or OBS closes, so it isn't saved with the collection.
+ * Several feeds can be watched at once (the projector, and Camera 2 to know whether a camera is plugged in), each with
+ * its own count. The filter is only added after the controller asks, is removed from a feed nobody has asked about for
+ * 30 seconds, and is taken off before the scene collection changes or OBS closes, so it isn't saved with the
+ * collection.
  */
 #include <obs-module.h>
 #include <util/platform.h>
@@ -24,6 +26,7 @@
 #include <cstring>
 #include <mutex>
 #include <string>
+#include <vector>
 
 #include "obs-websocket-api.h"
 #include "sources.h"
@@ -56,7 +59,7 @@ struct obs_source_frame *probeFrame(void *data, struct obs_source_frame *frame)
 	return frame;
 }
 
-// The one feed being watched
+// The feeds being watched
 struct Watch {
 	obs_weak_source_t *weak = nullptr; // the source with the probe
 	obs_source_t *filter = nullptr;    // the probe (we hold a reference)
@@ -64,21 +67,24 @@ struct Watch {
 	uint64_t lastAsk = 0; // os_gettime_ns
 };
 std::mutex lock;
-Watch *watching = nullptr;
+std::vector<Watch *> watching;
 
-void stopWatching()
+void stopWatch(Watch *w)
 {
-	if (!watching)
-		return;
-	obs_source_t *s = obs_weak_source_get_source(watching->weak);
+	obs_source_t *s = obs_weak_source_get_source(w->weak);
 	if (s) {
-		obs_source_filter_remove(s, watching->filter);
+		obs_source_filter_remove(s, w->filter);
 		obs_source_release(s);
 	}
-	obs_source_release(watching->filter);
-	obs_weak_source_release(watching->weak);
-	delete watching;
-	watching = nullptr;
+	obs_source_release(w->filter);
+	obs_weak_source_release(w->weak);
+	delete w;
+}
+void stopWatching()
+{
+	for (Watch *w : watching)
+		stopWatch(w);
+	watching.clear();
 }
 
 bool deliversFrames(obs_source_t *s)
@@ -146,25 +152,28 @@ void reqGetSourceFrames(obs_data_t *request, obs_data_t *response, void *)
 	obs_data_set_string(response, "source", obs_source_get_name(feed));
 	obs_data_set_bool(response, "showing", obs_source_showing(feed));
 	const uint64_t now = os_gettime_ns();
-	obs_source_t *was = watching ? obs_weak_source_get_source(watching->weak) : nullptr;
-	const bool same = was == feed;
-	obs_source_release(was);
-	if (same) {
-		Probe *p = static_cast<Probe *>(obs_obj_get_data(watching->filter));
+	Watch *w = nullptr;
+	for (Watch *x : watching)
+		if (obs_weak_source_references_source(x->weak, feed)) {
+			w = x;
+			break;
+		}
+	if (w) {
+		Probe *p = static_cast<Probe *>(obs_obj_get_data(w->filter));
 		const uint64_t frames = p ? p->frames.load() : 0;
-		const double secs = (double)(now - watching->lastAsk) / 1e9;
-		const double fps = secs > 0.2 ? (double)(frames - watching->lastFrames) / secs : 0.0;
-		watching->lastFrames = frames;
-		watching->lastAsk = now;
+		const double secs = (double)(now - w->lastAsk) / 1e9;
+		const double fps = secs > 0.2 ? (double)(frames - w->lastFrames) / secs : 0.0;
+		w->lastFrames = frames;
+		w->lastAsk = now;
 		obs_data_set_int(response, "fps", (long long)std::lround(fps));
 		obs_data_set_bool(response, "started", false);
 	} else {
-		stopWatching();
-		watching = new Watch();
-		watching->weak = obs_source_get_weak_source(feed);
-		watching->filter = obs_source_create_private(PROBE_ID, PROBE_NAME, nullptr);
-		obs_source_filter_add(feed, watching->filter);
-		watching->lastAsk = now;
+		w = new Watch();
+		w->weak = obs_source_get_weak_source(feed);
+		w->filter = obs_source_create_private(PROBE_ID, PROBE_NAME, nullptr);
+		obs_source_filter_add(feed, w->filter);
+		w->lastAsk = now;
+		watching.push_back(w);
 		obs_data_set_int(response, "fps", -1);
 		obs_data_set_bool(response, "started", true);
 	}
@@ -192,7 +201,7 @@ void frame_probe_register_requests(obs_websocket_vendor vendor)
 	obs_websocket_vendor_register_request(vendor, "GetSourceFrames", reqGetSourceFrames, nullptr);
 }
 
-// Nobody has asked for 30 seconds (the slideshow is off, or the controller closed): take the probe off.
+// A feed nobody has asked about for 30 seconds (the slideshow is off, or the controller closed): its probe comes off.
 // Checked every few seconds from OBS's tick.
 static float sinceCheck = 0.0f;
 static void probeTick(void *, float seconds)
@@ -202,8 +211,17 @@ static void probeTick(void *, float seconds)
 		return;
 	sinceCheck = 0.0f;
 	std::unique_lock<std::mutex> g(lock, std::try_to_lock);
-	if (g.owns_lock() && watching && os_gettime_ns() - watching->lastAsk > 30ULL * 1000000000ULL)
-		stopWatching();
+	if (!g.owns_lock())
+		return;
+	const uint64_t now = os_gettime_ns();
+	for (auto it = watching.begin(); it != watching.end();) {
+		if (now - (*it)->lastAsk > 30ULL * 1000000000ULL) {
+			stopWatch(*it);
+			it = watching.erase(it);
+		} else {
+			++it;
+		}
+	}
 }
 void frame_probe_start_ticks(void)
 {
