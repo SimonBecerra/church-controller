@@ -38,7 +38,8 @@
  *   MatchColors   { target }   -> { accepted, jobId, code, message }, then the ColorMatchResult event
  *   ResetColorMatch { target } -> { ok, code, ...status }
  *   RemoveColorMatch { target } -> { ok, code }
- *   status = { target, reference, enabled, mode, strength, state, message, confidence, applied, busy, matchedAt }
+ *   status = { target, reference, enabled, mode, strength, state, message, confidence, applied, busy, matchedAt,
+ *              correction{r, g, b, saturation, low, mid, high} }   (gains, saturation, tone curve at 25/50/75%)
  *   codes: OK, NO_TARGET, NO_MATCH (no Color Match on that source), NO_REFERENCE, SAME_SOURCE, FEEDBACK
  * Events
  *   ColorMatchResult  { jobId, target, ok, code, message, confidence }
@@ -874,6 +875,13 @@ bool status(obs_source_t *filter, Status &out)
 	out.applied = !f->sh->goal.isIdentity();
 	out.busy = f->sh->busy;
 	out.matchedAt = f->sh->matchedAt;
+	const cm::Params &p = f->sh->goal;
+	for (int i = 0; i < 3; i++)
+		out.gain[i] = p.gain[i];
+	out.saturation = p.saturation;
+	out.curve25 = p.curve[(cm::kCurvePoints - 1) / 4];
+	out.curve50 = p.curve[(cm::kCurvePoints - 1) / 2];
+	out.curve75 = p.curve[(cm::kCurvePoints - 1) * 3 / 4];
 	return true;
 }
 
@@ -989,6 +997,17 @@ static void fillStatus(Filter *f, obs_data_t *d)
 	obs_data_set_bool(d, "applied", st.applied);
 	obs_data_set_bool(d, "busy", st.busy);
 	obs_data_set_int(d, "matchedAt", st.matchedAt);
+	// The correction, for the controller's report ("warmer", "brighter"…)
+	obs_data_t *c = obs_data_create();
+	obs_data_set_double(c, "r", st.gain[0]);
+	obs_data_set_double(c, "g", st.gain[1]);
+	obs_data_set_double(c, "b", st.gain[2]);
+	obs_data_set_double(c, "saturation", st.saturation);
+	obs_data_set_double(c, "low", st.curve25);
+	obs_data_set_double(c, "mid", st.curve50);
+	obs_data_set_double(c, "high", st.curve75);
+	obs_data_set_obj(d, "correction", c);
+	obs_data_release(c);
 }
 
 static void setCode(obs_data_t *response, bool ok, const char *code, const std::string &message = std::string())
