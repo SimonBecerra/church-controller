@@ -34,6 +34,11 @@ struct Status {
 	bool applied = false;    // a correction is in use
 	bool busy = false;       // measuring now
 	long long matchedAt = 0; // last successful match, milliseconds since 1970 (0 = never)
+	// The correction in use (identity when not matched): per-channel gain (white balance), saturation, and the
+	// tone curve's output at 25%, 50% and 75% input (contrast and brightness). For the controller's plain-words report.
+	float gain[3] = {1.0f, 1.0f, 1.0f};
+	float saturation = 1.0f;
+	float curve25 = 0.25f, curve50 = 0.5f, curve75 = 0.75f;
 };
 
 struct SourceInfo {
