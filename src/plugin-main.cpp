@@ -10,7 +10,14 @@
  *   ListYouTubeBroadcasts  Read the upcoming broadcasts from OBS's "Select Existing Broadcast" tab.
  *   StartYouTubeBroadcast  Fill in OBS's "Create New Broadcast" tab (title, description, privacy only,
  *                          with "Remember these settings" ticked) and press OBS's go-live button,
- *                          or select an existing broadcast and start it.
+ *                          or select an existing broadcast and start it. An existing broadcast scheduled with
+ *                          auto-start off stays in YouTube's preview until OBS's "Start Broadcast" is pressed:
+ *                          once YouTube is receiving the video, the plug-in presses it, and reports the outcome
+ *                          as a "BroadcastLive" event { ok, code, message }.
+ *   GetBroadcastState      { state }: none (nothing to start: not streaming, or the broadcast started by
+ *                          itself), waiting (streaming, YouTube not receiving yet), ready (Start Broadcast can be
+ *                          pressed now), live (started).
+ *   StartBroadcastNow      Press OBS's "Start Broadcast" (only when its state is ready).
  *
  * It also adds two sources with their own commands: "Lower Third" (lower-third.cpp) and
  * "Scripture & Hymns" (text-display.cpp), and the "Color Match" filter with its dock (color-match.cpp).
@@ -58,13 +65,15 @@
 #include <cstring>
 #include <functional>
 #include <memory>
+#include <string>
+
+#include <util/platform.h>
 
 #ifdef _WIN32
 #define NOMINMAX
 #include <windows.h>
 #include <shellapi.h>
 #include <shlobj.h>
-#include <util/platform.h>
 #endif
 
 #include "obs-websocket-api.h"
@@ -281,7 +290,8 @@ static void openYouTubeDialog(const QString &jobId, const char *eventName, std::
 // After pressing OBS's go-live button: wait until OBS is streaming, or report what OBS showed instead.
 // After "Create broadcast and start streaming": wait for the stream, an error message, or OBS's YouTube window
 // being closed without the stream starting (cancelled, or closed after an error).
-static void waitForStreamStart(const QString &jobId)
+static void startBroadcastWhenReady();
+static void waitForStreamStart(const QString &jobId, bool existing = false)
 {
 	auto closedSince = std::make_shared<qint64>(0);
 	waitFor(
@@ -300,8 +310,12 @@ static void waitForStreamStart(const QString &jobId)
 		},
 		60000,
 		[=](bool) {
-			if (obs_frontend_streaming_active())
+			if (obs_frontend_streaming_active()) {
+				// An existing broadcast may need "Start Broadcast" before viewers see it
+				if (existing)
+					startBroadcastWhenReady();
 				return emitResult("BroadcastResult", jobId, true, "OK", "Streaming started.");
+			}
 			const QString box = visibleMessageBoxText();
 			if (!box.isEmpty())
 				return emitResult("BroadcastResult", jobId, false, "YOUTUBE_ERROR", box);
@@ -319,6 +333,107 @@ static void reqGetYouTubeStatus(obs_data_t *, obs_data_t *response, void *)
 {
 	obs_data_set_bool(response, "signedIn", youtubeSignedIn());
 	obs_data_set_bool(response, "streaming", obs_frontend_streaming_active());
+}
+
+/* ------------------------------------------------------------------ a broadcast that doesn't start by itself */
+
+// OBS's "Start Broadcast" button, in the Controls dock. Its "broadcastState" property is idle, ready (streaming,
+// the broadcast not started yet) or active; it's only enabled once YouTube says the video is arriving.
+static QPushButton *broadcastButton()
+{
+	QMainWindow *w = obsMainWindow();
+	return w ? w->findChild<QPushButton *>("broadcastButton") : nullptr;
+}
+static const char *broadcastState()
+{
+	QPushButton *b = broadcastButton();
+	if (!b || b->isHidden() || !obs_frontend_streaming_active())
+		return "none";
+	const QString st = b->property("broadcastState").toString();
+	if (st == "active")
+		return "live";
+	if (st == "ready")
+		return b->isEnabled() ? "ready" : "waiting";
+	return "none";
+}
+static void emitLive(bool ok, const char *code, const QString &message)
+{
+	obs_data_t *d = obs_data_create();
+	obs_data_set_bool(d, "ok", ok);
+	obs_data_set_string(d, "code", code);
+	obs_data_set_string(d, "message", message.toUtf8().constData());
+	if (vendor)
+		obs_websocket_vendor_emit_event(vendor, "BroadcastLive", d);
+	obs_data_release(d);
+	LOG(ok ? LOG_INFO : LOG_WARNING, "BroadcastLive: %s %s", code, message.toUtf8().constData());
+}
+// Just started streaming to a broadcast: if it's waiting for Start Broadcast, press it as soon as YouTube is
+// receiving the video (up to 90 seconds), then report. A broadcast that started by itself: nothing to do.
+static void startBroadcastWhenReady()
+{
+	auto pressed = std::make_shared<bool>(false);
+	auto since = std::make_shared<qint64>(QDateTime::currentMSecsSinceEpoch());
+	waitFor(
+		[pressed, since] {
+			const QString st = broadcastState();
+			if (st == "live" || !obs_frontend_streaming_active())
+				return true;
+			// "none" for a few seconds after starting: the broadcast started by itself
+			if (st == "none")
+				return QDateTime::currentMSecsSinceEpoch() - *since > 4000;
+			if (st == "ready" && !*pressed) {
+				*pressed = true;
+				if (QPushButton *b = broadcastButton())
+					b->click(); // OBS's own Start Broadcast (an error shows OBS's message, as by hand)
+			}
+			return false;
+		},
+		90000,
+		[pressed](bool) {
+			const QString st = broadcastState();
+			if (st == "live")
+				return *pressed ? emitLive(true, "STARTED", "The YouTube broadcast started.") : (void)0;
+			if (!obs_frontend_streaming_active() || st == "none")
+				return;
+			emitLive(false, st == "waiting" ? "NOT_RECEIVING" : "NOT_STARTED",
+				 st == "waiting"
+					 ? "YouTube isn't receiving the video yet, so the broadcast hasn't started."
+					 : "The broadcast hasn't started. Press Start Broadcast in OBS.");
+		});
+}
+static void reqGetBroadcastState(obs_data_t *, obs_data_t *response, void *)
+{
+	// Qt widgets are read on the UI thread; wait briefly for the answer
+	auto out = std::make_shared<std::string>("none");
+	auto done = std::make_shared<std::atomic<bool>>(false);
+	runOnUi([out, done] {
+		*out = broadcastState();
+		*done = true;
+	});
+	for (int i = 0; i < 100 && !*done; i++)
+		os_sleep_ms(10);
+	obs_data_set_string(response, "state", done->load() ? out->c_str() : "none");
+}
+static void reqStartBroadcastNow(obs_data_t *, obs_data_t *response, void *)
+{
+	runOnUi([] {
+		const QString st = broadcastState();
+		if (st == "ready") {
+			if (QPushButton *b = broadcastButton())
+				b->click();
+			QTimer::singleShot(1500, [] {
+				const QString now = broadcastState();
+				if (now == "live")
+					emitLive(true, "STARTED", "The YouTube broadcast started.");
+				else if (now == "ready")
+					emitLive(false, "NOT_STARTED",
+						 "YouTube didn't start the broadcast. Check OBS.");
+			});
+		} else if (st == "waiting") {
+			startBroadcastWhenReady();
+		}
+	});
+	obs_data_set_bool(response, "accepted", true);
 }
 
 static void reqShowOBS(obs_data_t *, obs_data_t *response, void *)
@@ -459,7 +574,7 @@ static void reqStartBroadcast(obs_data_t *request, obs_data_t *response, void *)
 									"BroadcastResult", jobId, false, "INCOMPLETE",
 									"OBS needs more information in its dialog. Finish in OBS.");
 							ok->click();
-							waitForStreamStart(jobId);
+							waitForStreamStart(jobId, true);
 						});
 					});
 				return;
@@ -680,6 +795,8 @@ void obs_module_post_load(void)
 	}
 	obs_websocket_vendor_register_request(vendor, "GetYouTubeStatus", reqGetYouTubeStatus, nullptr);
 	obs_websocket_vendor_register_request(vendor, "ShowOBS", reqShowOBS, nullptr);
+	obs_websocket_vendor_register_request(vendor, "GetBroadcastState", reqGetBroadcastState, nullptr);
+	obs_websocket_vendor_register_request(vendor, "StartBroadcastNow", reqStartBroadcastNow, nullptr);
 	obs_websocket_vendor_register_request(vendor, "OpenStreamStart", reqOpenStreamStart, nullptr);
 	obs_websocket_vendor_register_request(vendor, "ListYouTubeBroadcasts", reqListBroadcasts, nullptr);
 	obs_websocket_vendor_register_request(vendor, "StartYouTubeBroadcast", reqStartBroadcast, nullptr);
